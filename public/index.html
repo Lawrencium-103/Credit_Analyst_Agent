@@ -717,18 +717,26 @@ let MEMO_MD = "";
 $("#genMemo").addEventListener("click", async ()=>{
   const btn=$("#genMemo"); btn.disabled=true;
   $("#memoErr").classList.add("hidden");
-  $("#memoLabel").textContent="Running agent…";
+  $("#memoLabel").textContent="Running agent\u2026";
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 90000);
   try {
     const d = await apiFetch("/api/agent",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({path:$("#memoPath").value||null, entity:$("#memoEntity").value||null})});
+      body:JSON.stringify({path:$("#memoPath").value||null, entity:$("#memoEntity").value||null}),
+      signal:ctrl.signal});
     if(d.error){ $("#memoErr").textContent=d.error; $("#memoErr").classList.remove("hidden"); btn.disabled=false; $("#memoLabel").textContent="Generate AI credit memo"; return; }
     if(d.status==="error"){ $("#memoErr").textContent="Agent error: "+(d.error||"unknown"); $("#memoErr").classList.remove("hidden"); btn.disabled=false; $("#memoLabel").textContent="Generate AI credit memo"; return; }
     const r = d.result || d;
     MEMO_MD = r.markdown || "";
     $("#memoPreview").innerHTML = MD(MEMO_MD);
     $("#memoOut").classList.remove("hidden"); $("#memoOut").classList.add("in");
-  } catch(e){ $("#memoErr").textContent="Error: "+e.message+" — the agent can take up to ~60s; ensure the deployment allows long requests."; $("#memoErr").classList.remove("hidden"); }
-  finally { btn.disabled=false; $("#memoLabel").textContent="Generate AI credit memo"; }
+  } catch(e){
+    const msg = e.name==="AbortError"
+      ? "AI memo timed out after 90s. This endpoint requires Vercel Pro (Hobby is limited to 10s)."
+      : "Error: "+e.message;
+    $("#memoErr").textContent=msg; $("#memoErr").classList.remove("hidden");
+  }
+  finally { clearTimeout(timer); btn.disabled=false; $("#memoLabel").textContent="Generate AI credit memo"; }
 });
 $("#dlMemo").addEventListener("click", ()=>{ if(MEMO_MD) downloadBlob(new Blob([MEMO_MD],{type:"text/markdown"}), "credit_memo.md"); });
 
