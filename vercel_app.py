@@ -27,6 +27,7 @@ except Exception:  # pragma: no cover - defensive
     async def app(scope, receive, send):
         if scope["type"] == "lifespan":
             return
-        body = json.dumps({"error": "import_failed", "detail": _error}).encode("utf-8")
+        _short = _error[-1500:] if len(_error) > 1500 else _error
+        body = json.dumps({"error": "import_failed", "detail": _short}).encode("utf-8")
         await send({"type": "http.response.start", "status": 500, "headers": _headers})
         await send({"type": "http.response.body", "body": body})
