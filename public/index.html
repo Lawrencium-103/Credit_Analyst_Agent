@@ -413,6 +413,18 @@ window.addEventListener("error", (e) => {
 
 let STATE = { files: [], result: null };
 
+// ---------- safe JSON fetch ----------
+async function apiFetch(url, opts = {}) {
+  const res = await fetch(url, opts);
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    const txt = await res.text().catch(() => "");
+    const snippet = txt.slice(0, 300);
+    throw new Error("Server returned " + res.status + " (" + ct.split(";")[0] + "): " + snippet);
+  }
+  return res.json();
+}
+
 // ---------- view routing ----------
 const views = ["ingest","extract","research","standards","report","memo"];
 function showView(name){
@@ -498,8 +510,7 @@ $("#extractBtn").addEventListener("click", async ()=>{
     STATE.files.forEach(f=>fd.append("files", f.file));
     fd.append("meta", JSON.stringify(STATE.files.map(f=>({year:+f.year, entity:f.entity||null}))));
     if (typeof STD_CACHE !== "undefined" && STD_CACHE) fd.append("standards", JSON.stringify(STD_CACHE));
-    const res = await fetch("/api/ingest", {method:"POST", body:fd});
-    const data = await res.json();
+    const data = await apiFetch("/api/ingest", {method:"POST", body:fd});
     if(data.error){ alert("Ingestion error: "+data.error); return; }
     STATE.result = data;
     showView("extract");
@@ -600,8 +611,7 @@ $("#runResearch").addEventListener("click", async ()=>{
       user_notes: $("#rNotes").value || null,
       macro_assumptions: $("#rMacro").value || null,
     };
-    const res = await fetch("/api/research", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-    const d = await res.json();
+    const d = await apiFetch("/api/research", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
     if(d.note){
       $("#dossier").innerHTML = `<p class="text-burnt font-medium">${d.note}</p>`;
       $("#rConf").textContent="";
@@ -617,7 +627,7 @@ $("#runResearch").addEventListener("click", async ()=>{
 // ---------- standards ----------
 async function loadStandards(){
   try {
-    const d = await (await fetch("/api/standards")).json();
+    const d = await apiFetch("/api/standards");
     $("#stdName").value = d.name || "Industry standard";
     const t = $("#stdTable"); t.innerHTML="";
     (d.thresholds||[]).forEach((th,i)=>{
@@ -642,8 +652,10 @@ async function loadStandards(){
 let STD_CACHE = {name:"", thresholds:[]};
 $("#stdName").addEventListener("input", e=>STD_CACHE.name=e.target.value);
 $("#saveStd").addEventListener("click", async ()=>{
-  const res = await fetch("/api/standards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(STD_CACHE)});
-  $("#stdStatus").textContent = res.ok ? "Saved ✓" : "Save failed.";
+  try {
+    const res = await apiFetch("/api/standards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(STD_CACHE)});
+    $("#stdStatus").textContent = "Saved ✓";
+  } catch(e) { $("#stdStatus").textContent = "Save failed: " + e.message; }
 });
 
 // ---------- report ----------
@@ -674,8 +686,7 @@ $("#genReport").addEventListener("click", async ()=>{
       body.workbook_path = "data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx";
     }
     STATE.reportBody = body;
-    const res = await fetch("/api/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    const d = await res.json();
+    const d = await apiFetch("/api/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     if(d.error){ alert("Report error: "+d.error); return; }
     $("#rptPreview").innerHTML = MD(d.html);
     $("#rptOut").classList.remove("hidden"); $("#rptOut").classList.add("in");
@@ -688,7 +699,12 @@ async function downloadReport(fmt){
   const mime = fmt==="pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   try {
     const r = await fetch("/api/report/download?format="+fmt,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(STATE.reportBody)});
-    if(!r.ok){ const e=await r.json().catch(()=>({})); alert("Download error: "+(e.error||r.statusText)); return; }
+    if(!r.ok){
+      const ct = r.headers.get("content-type")||"";
+      if(ct.includes("application/json")){ const e=await r.json(); alert("Download error: "+(e.error||"unknown")); }
+      else { const txt=await r.text().catch(()=>""); alert("Server error "+r.status+": "+txt.slice(0,300)); }
+      return;
+    }
     const blob = await r.blob();
     downloadBlob(blob, "credit_assessment."+ext);
   } catch(e){ alert("Download failed: "+e.message); }
@@ -703,9 +719,8 @@ $("#genMemo").addEventListener("click", async ()=>{
   $("#memoErr").classList.add("hidden");
   $("#memoLabel").textContent="Running agent…";
   try {
-    const res = await fetch("/api/agent",{method:"POST",headers:{"Content-Type":"application/json"},
+    const d = await apiFetch("/api/agent",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({path:$("#memoPath").value||null, entity:$("#memoEntity").value||null})});
-    const d = await res.json();
     if(d.error){ $("#memoErr").textContent=d.error; $("#memoErr").classList.remove("hidden"); btn.disabled=false; $("#memoLabel").textContent="Generate AI credit memo"; return; }
     if(d.status==="error"){ $("#memoErr").textContent="Agent error: "+(d.error||"unknown"); $("#memoErr").classList.remove("hidden"); btn.disabled=false; $("#memoLabel").textContent="Generate AI credit memo"; return; }
     const r = d.result || d;

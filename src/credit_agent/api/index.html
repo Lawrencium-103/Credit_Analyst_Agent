@@ -413,6 +413,18 @@ window.addEventListener("error", (e) => {
 
 let STATE = { files: [], result: null };
 
+// ---------- safe JSON fetch ----------
+async function apiFetch(url, opts = {}) {
+  const res = await fetch(url, opts);
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    const txt = await res.text().catch(() => "");
+    const snippet = txt.slice(0, 300);
+    throw new Error("Server returned " + res.status + " (" + ct.split(";")[0] + "): " + snippet);
+  }
+  return res.json();
+}
+
 // ---------- view routing ----------
 const views = ["ingest","extract","research","standards","report","memo"];
 function showView(name){
@@ -497,8 +509,7 @@ $("#extractBtn").addEventListener("click", async ()=>{
     const fd = new FormData();
     STATE.files.forEach(f=>fd.append("files", f.file));
     fd.append("meta", JSON.stringify(STATE.files.map(f=>({year:+f.year, entity:f.entity||null}))));
-    const res = await fetch("/api/ingest", {method:"POST", body:fd});
-    const data = await res.json();
+    const data = await apiFetch("/api/ingest", {method:"POST", body:fd});
     if(data.error){ alert("Ingestion error: "+data.error); return; }
     STATE.result = data;
     showView("extract");
@@ -599,8 +610,7 @@ $("#runResearch").addEventListener("click", async ()=>{
       user_notes: $("#rNotes").value || null,
       macro_assumptions: $("#rMacro").value || null,
     };
-    const res = await fetch("/api/research", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-    const d = await res.json();
+    const d = await apiFetch("/api/research", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
     if(d.note){
       $("#dossier").innerHTML = `<p class="text-burnt font-medium">${d.note}</p>`;
       $("#rConf").textContent="";
@@ -616,7 +626,7 @@ $("#runResearch").addEventListener("click", async ()=>{
 // ---------- standards ----------
 async function loadStandards(){
   try {
-    const d = await (await fetch("/api/standards")).json();
+    const d = await apiFetch("/api/standards");
     $("#stdName").value = d.name || "Industry standard";
     const t = $("#stdTable"); t.innerHTML="";
     (d.thresholds||[]).forEach((th,i)=>{
@@ -641,8 +651,10 @@ async function loadStandards(){
 let STD_CACHE = {name:"", thresholds:[]};
 $("#stdName").addEventListener("input", e=>STD_CACHE.name=e.target.value);
 $("#saveStd").addEventListener("click", async ()=>{
-  const res = await fetch("/api/standards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(STD_CACHE)});
-  $("#stdStatus").textContent = res.ok ? "Saved ✓" : "Save failed.";
+  try {
+    await apiFetch("/api/standards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(STD_CACHE)});
+    $("#stdStatus").textContent = "Saved ✓";
+  } catch(e) { $("#stdStatus").textContent = "Save failed: " + e.message; }
 });
 
 // ---------- report ----------
@@ -672,62 +684,48 @@ $("#genReport").addEventListener("click", async ()=>{
     } else {
       body.workbook_path = "data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx";
     }
-    const res = await fetch("/api/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    const d = await res.json();
+    STATE.reportBody = body;
+    const d = await apiFetch("/api/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     if(d.error){ alert("Report error: "+d.error); return; }
-    RPT.pdf=d.pdf_base64; RPT.docx=d.docx_base64;
     $("#rptPreview").innerHTML = MD(d.html);
     $("#rptOut").classList.remove("hidden"); $("#rptOut").classList.add("in");
   } catch(e){ alert("Error: "+e.message); }
   finally { btn.disabled=false; $("#rptLabel").previousSibling?.remove?.(); $("#rptLabel").textContent="Generate branded report"; }
 });
-$("#dlPdf").addEventListener("click", ()=>{ if(RPT.pdf) downloadBlob(b64toBlob(RPT.pdf,"application/pdf"), "credit_assessment.pdf"); });
-$("#dlDocx").addEventListener("click", ()=>{ if(RPT.docx) downloadBlob(b64toBlob(RPT.docx,"application/vnd.openxmlformats-officedocument.wordprocessingml.document"), "credit_assessment.docx"); });
-
-// ---------- memo (live AI agent, background task + polling) ----------
-let MEMO_MD = "";
-let MEMO_POLL = null;
-async function pollMemo(taskId){
-  for(let i=0;i<90;i++){
-    await new Promise(r=>setTimeout(r,2000));
-    let s;
-    try {
-      const ctrl = new AbortController();
-      const to = setTimeout(()=>ctrl.abort(), 15000);
-      const resp = await fetch("/api/agent/"+taskId, {signal: ctrl.signal});
-      clearTimeout(to);
-      s = await resp.json();
-    } catch(e){
-      $("#memoErr").textContent="Polling error: "+e.message+" — is the server still running?";
-      $("#memoErr").classList.remove("hidden");
+async function downloadReport(fmt){
+  if(!STATE.reportBody){ alert("Generate a report first."); return; }
+  const ext = fmt==="pdf" ? "pdf" : "docx";
+  try {
+    const r = await fetch("/api/report/download?format="+fmt,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(STATE.reportBody)});
+    if(!r.ok){
+      const ct = r.headers.get("content-type")||"";
+      if(ct.includes("application/json")){ const e=await r.json(); alert("Download error: "+(e.error||"unknown")); }
+      else { const txt=await r.text().catch(()=>""); alert("Server error "+r.status+": "+txt.slice(0,300)); }
       return;
     }
-    if(s.status==="done"){
-      const d = s.result;
-      MEMO_MD = d.markdown;
-      $("#memoPreview").innerHTML = MD(d.markdown);
-      $("#memoOut").classList.remove("hidden"); $("#memoOut").classList.add("in");
-      return;
-    }
-    if(s.status==="error"){
-      $("#memoErr").textContent="Agent error: "+(s.error||"unknown"); $("#memoErr").classList.remove("hidden");
-      return;
-    }
-    $("#memoLabel").textContent="Running agent ("+((i+1)*2)+"s)";
-  }
-  $("#memoErr").textContent="Agent is taking too long — try again or check the server log.";
-  $("#memoErr").classList.remove("hidden");
+    const blob = await r.blob();
+    downloadBlob(blob, "credit_assessment."+ext);
+  } catch(e){ alert("Download failed: "+e.message); }
 }
+$("#dlPdf").addEventListener("click", ()=>downloadReport("pdf"));
+$("#dlDocx").addEventListener("click", ()=>downloadReport("docx"));
+
+// ---------- memo (live AI agent, synchronous call) ----------
+let MEMO_MD = "";
 $("#genMemo").addEventListener("click", async ()=>{
   const btn=$("#genMemo"); btn.disabled=true;
   $("#memoErr").classList.add("hidden");
+  $("#memoLabel").textContent="Running agent\u2026";
   try {
-    const res = await fetch("/api/agent",{method:"POST",headers:{"Content-Type":"application/json"},
+    const d = await apiFetch("/api/agent",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({path:$("#memoPath").value||null, entity:$("#memoEntity").value||null})});
-    const d = await res.json();
-    if(d.error){ $("#memoErr").textContent=d.error; $("#memoErr").classList.remove("hidden"); btn.disabled=false; return; }
-    await pollMemo(d.task_id);
-  } catch(e){ $("#memoErr").textContent="Error: "+e.message; $("#memoErr").classList.remove("hidden"); }
+    if(d.error){ $("#memoErr").textContent=d.error; $("#memoErr").classList.remove("hidden"); btn.disabled=false; $("#memoLabel").textContent="Generate AI credit memo"; return; }
+    if(d.status==="error"){ $("#memoErr").textContent="Agent error: "+(d.error||"unknown"); $("#memoErr").classList.remove("hidden"); btn.disabled=false; $("#memoLabel").textContent="Generate AI credit memo"; return; }
+    const r = d.result || d;
+    MEMO_MD = r.markdown || "";
+    $("#memoPreview").innerHTML = MD(MEMO_MD);
+    $("#memoOut").classList.remove("hidden"); $("#memoOut").classList.add("in");
+  } catch(e){ $("#memoErr").textContent="Error: "+e.message+" \u2014 the agent can take up to ~60s; ensure the deployment allows long requests."; $("#memoErr").classList.remove("hidden"); }
   finally { btn.disabled=false; $("#memoLabel").textContent="Generate AI credit memo"; }
 });
 $("#dlMemo").addEventListener("click", ()=>{ if(MEMO_MD) downloadBlob(new Blob([MEMO_MD],{type:"text/markdown"}), "credit_memo.md"); });
