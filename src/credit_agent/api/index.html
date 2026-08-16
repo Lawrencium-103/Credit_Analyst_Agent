@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ATLAS — Credit Intelligence</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="/static/marked.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
+          display: ["Space Grotesk", "system-ui", "sans-serif"],
+          mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+        },
+        colors: {
+          paper: "#F6F2EC",
+          "paper-2": "#FBF9F4",
+          ink: "#16130F",
+          "ink-soft": "#534B40",
+          amber: "#CC8800",
+          "amber-deep": "#A86C00",
+          burnt: "#C55221",
+        },
+        borderRadius: { "4xl": "2rem", "5xl": "2.5rem" },
+      },
+    },
+  };
+</script>
+<style>
+  :root { color-scheme: light; }
+  html, body { background: #F6F2EC; }
+  body {
+    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+    color: #16130F;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* subtle film-grain / paper texture */
+  .grain::before {
+    content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    opacity: 0.035; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .display { font-family: "Space Grotesk", system-ui, sans-serif; letter-spacing: -0.02em; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  .ease-luxe { transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1); }
+
+  /* double-bezel card */
+  .bezel { background: rgba(22,19,15,0.04); border-radius: 2rem; padding: 0.4rem; box-shadow: 0 1px 2px rgba(22,19,15,0.04); }
+  .bezel > .core { background: #fff; border-radius: calc(2rem - 0.4rem); padding: 1.75rem; box-shadow: inset 0 1px 0 rgba(255,255,255,0.7); }
+
+  .pill-nav { background: rgba(251,249,244,0.72); backdrop-filter: blur(18px); border: 1px solid rgba(22,19,15,0.07); }
+
+  .eyebrow { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; font-weight: 600; color: #A86C00; }
+  .eyebrow::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: #CC8800; margin-right: 10px; vertical-align: middle; }
+
+  .btn { display: inline-flex; align-items: center; gap: 0.75rem; border-radius: 999px; padding: 0.85rem 1.5rem; font-weight: 600; transition: all 0.5s cubic-bezier(0.32,0.72,0,1); }
+  .btn-amber { background: #16130F; color: #F6F2EC; }
+  .btn-amber:hover { background: #2a241c; }
+  .btn-amber:active { transform: scale(0.98); }
+  .btn-ghost { background: rgba(22,19,15,0.05); color: #16130F; }
+  .btn-ghost:hover { background: rgba(22,19,15,0.09); }
+  .btn .ic { width: 34px; height: 34px; border-radius: 999px; background: rgba(204,136,0,0.16); color: #CC8800; display: grid; place-items: center; transition: all 0.5s cubic-bezier(0.32,0.72,0,1); }
+  .btn-amber:hover .ic { transform: translate(3px,-2px) scale(1.06); }
+
+  .file-chip { background:#fff; border:1px solid rgba(22,19,15,0.08); border-radius:1.25rem; }
+  input, textarea, select { font-family: inherit; }
+  .field { background:#FBF9F4; border:1px solid rgba(22,19,15,0.1); border-radius:0.9rem; padding:0.7rem 0.9rem; width:100%; color:#16130F; transition: all .3s ease; }
+  .field:focus { outline:none; border-color:#CC8800; box-shadow:0 0 0 3px rgba(204,136,0,0.14); }
+
+  .reveal { opacity:0; transform: translateY(26px); filter: blur(6px); transition: opacity .8s cubic-bezier(0.32,0.72,0,1), transform .8s cubic-bezier(0.32,0.72,0,1), filter .8s cubic-bezier(0.32,0.72,0,1); }
+  .reveal.in { opacity:1; transform:none; filter:none; }
+
+  .nav-link { position:relative; padding:0.5rem 1rem; border-radius:999px; color:#534B40; font-weight:500; font-size:14px; transition: all .4s cubic-bezier(0.32,0.72,0,1); }
+  .nav-link:hover { color:#16130F; background:rgba(22,19,15,0.05); }
+  .nav-link.active { color:#16130F; background:#fff; box-shadow:0 1px 2px rgba(22,19,15,0.06); }
+
+  /* dropzone */
+  .dropzone { border:1.5px dashed rgba(22,19,15,0.18); border-radius:1.75rem; transition: all .4s cubic-bezier(0.32,0.72,0,1); background:rgba(255,255,255,0.4); }
+  .dropzone.drag { border-color:#CC8800; background:rgba(204,136,0,0.06); transform: scale(1.005); }
+
+  table.matrix { border-collapse: separate; border-spacing: 0; width:100%; }
+  table.matrix th, table.matrix td { padding:0.7rem 0.9rem; text-align:right; border-bottom:1px solid rgba(22,19,15,0.07); }
+  table.matrix th:first-child, table.matrix td:first-child { text-align:left; }
+  table.matrix thead th { font-family:"Space Grotesk"; font-weight:600; color:#534B40; font-size:13px; position:sticky; top:0; background:#FBF9F4; z-index:2; }
+  table.matrix tbody tr:hover { background:rgba(204,136,0,0.04); }
+  .grp-tag { font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:#A86C00; background:rgba(204,136,0,0.1); padding:2px 8px; border-radius:999px; }
+  .miss { color:#B7AE9F; }
+  .markdown h1,.markdown h2,.markdown h3 { font-family:"Space Grotesk"; font-weight:600; margin:1.1rem 0 .6rem; letter-spacing:-0.01em; }
+  .markdown h2 { font-size:1.15rem; border-left:3px solid #CC8800; padding-left:.6rem; }
+  .markdown ul { list-style:disc; padding-left:1.2rem; margin:.4rem 0; }
+  .markdown li { margin:.25rem 0; }
+  .markdown a { color:#A86C00; text-decoration:underline; }
+  .markdown code { font-family:"JetBrains Mono"; font-size:.85em; background:rgba(22,19,15,0.06); padding:1px 5px; border-radius:5px; }
+  .spinner { width:18px;height:18px;border:2px solid rgba(246,242,236,0.4); border-top-color:#F6F2EC; border-radius:999px; animation:spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .overlay { background:rgba(246,242,236,0.92); backdrop-filter: blur(20px); }
+  .bar { height:6px; border-radius:999px; background:rgba(22,19,15,0.08); overflow:hidden; }
+  .bar > i { display:block; height:100%; background:#CC8800; }
+</style>
+</head>
+<body class="grain">
+<div class="relative z-[2] min-h-[100dvh]">
+
+  <!-- Floating nav -->
+  <header class="fixed top-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl">
+    <nav class="pill-nav rounded-full px-3 py-2 flex items-center justify-between shadow-sm">
+      <div class="flex items-center gap-2 pl-2">
+        <div class="w-8 h-8 rounded-full bg-ink grid place-items-center text-paper text-sm font-display">A</div>
+        <span class="font-display font-semibold tracking-tight hidden sm:block">ATLAS</span>
+      </div>
+      <div class="hidden md:flex items-center gap-1" id="navLinks">
+        <button class="nav-link active" data-view="ingest">Ingest</button>
+        <button class="nav-link" data-view="extract">Extract</button>
+        <button class="nav-link" data-view="research">Research</button>
+        <button class="nav-link" data-view="standards">Standards</button>
+        <button class="nav-link" data-view="report">Report</button>
+        <button class="nav-link" data-view="memo">Memo</button>
+      </div>
+      <button id="burger" class="md:hidden w-9 h-9 grid place-items-center" aria-label="Menu">
+        <div class="space-y-1.5">
+          <span class="block w-5 h-0.5 bg-ink transition"></span>
+          <span class="block w-5 h-0.5 bg-ink transition"></span>
+          <span class="block w-5 h-0.5 bg-ink transition"></span>
+        </div>
+      </button>
+    </nav>
+  </header>
+
+  <!-- Mobile overlay -->
+  <div id="mobileMenu" class="fixed inset-0 z-30 hidden overlay md:hidden">
+    <div class="flex flex-col items-center justify-center h-full gap-3">
+      <button class="nav-link text-lg" data-view="ingest">Ingest</button>
+      <button class="nav-link text-lg" data-view="extract">Extract</button>
+      <button class="nav-link text-lg" data-view="research">Research</button>
+      <button class="nav-link text-lg" data-view="standards">Standards</button>
+      <button class="nav-link text-lg" data-view="report">Report</button>
+      <button class="nav-link text-lg" data-view="memo">Memo</button>
+    </div>
+  </div>
+
+  <main class="pt-28 pb-24">
+
+    <!-- ============ INGEST ============ -->
+    <section id="view-ingest" class="view px-5 max-w-5xl mx-auto">
+      <div class="reveal">
+        <p class="eyebrow">Credit Intelligence Platform</p>
+        <h1 class="display text-4xl sm:text-6xl font-semibold mt-4 leading-[1.05] max-w-3xl">
+          Underwrite with evidence,<br/>not instinct.
+        </h1>
+        <p class="text-ink-soft mt-5 max-w-xl text-lg">
+          Drop annual reports, spreadsheets or PDFs — singly or in batches, across multiple
+          fiscal years. ATLAS spreads them, normalises every line item, and prepares a
+          ready-to-review extraction.
+        </p>
+      </div>
+
+      <div class="reveal mt-10">
+        <div class="bezel">
+          <div class="core">
+            <div id="dropzone" class="dropzone p-10 text-center cursor-pointer">
+              <div class="w-14 h-14 mx-auto rounded-2xl bg-ink grid place-items-center text-paper text-2xl">+</div>
+              <p class="mt-4 font-display font-semibold text-lg">Drag &amp; drop files here</p>
+              <p class="text-ink-soft text-sm mt-1">XLSX, XLS or PDF · multiple files &amp; types supported</p>
+              <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.pdf" multiple class="hidden" />
+            </div>
+
+            <div id="fileList" class="mt-5 space-y-3"></div>
+
+            <div class="mt-6 flex flex-wrap items-center gap-3">
+              <button id="extractBtn" class="btn btn-amber" disabled>
+                <span id="extractLabel">Extract values</span>
+                <span class="ic">→</span>
+              </button>
+              <span id="ingestHint" class="text-sm text-ink-soft">Add at least one file to begin.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="reveal mt-8 grid sm:grid-cols-3 gap-4">
+        <div class="bezel"><div class="core py-6">
+          <p class="eyebrow">Multi-format</p><p class="mt-2 font-display font-semibold">Excel &amp; PDF</p>
+          <p class="text-sm text-ink-soft mt-1">Multi-sheet workbooks and scanned statements parsed in one pass.</p>
+        </div></div>
+        <div class="bezel"><div class="core py-6">
+          <p class="eyebrow">Multi-year</p><p class="mt-2 font-display font-semibold">Up to 5 FYs</p>
+          <p class="text-sm text-ink-soft mt-1">Tag each file with its fiscal year; comparison-ready.</p>
+        </div></div>
+        <div class="bezel"><div class="core py-6">
+          <p class="eyebrow">Audit-first</p><p class="mt-2 font-display font-semibold">Review flags</p>
+          <p class="text-sm text-ink-soft mt-1">Heuristic PDF drafts are flagged for human sign-off.</p>
+        </div></div>
+      </div>
+    </section>
+
+    <!-- ============ EXTRACT ============ -->
+    <section id="view-extract" class="view px-5 max-w-6xl mx-auto hidden">
+      <div class="reveal flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p class="eyebrow">Extraction Review</p>
+          <h2 id="extractTitle" class="display text-3xl sm:text-4xl font-semibold mt-3">Spread financials</h2>
+          <p id="extractMeta" class="text-ink-soft mt-1"></p>
+        </div>
+        <div class="flex gap-2">
+          <button id="dlCsv" class="btn btn-ghost"><span>CSV</span><span class="ic">↓</span></button>
+          <button id="dlJson" class="btn btn-ghost"><span>JSON</span><span class="ic">↓</span></button>
+          <button class="btn btn-amber" data-view="research"><span>To research</span><span class="ic">→</span></button>
+          <button class="btn btn-ghost" data-view="report"><span>To report</span><span class="ic">→</span></button>
+        </div>
+      </div>
+
+      <div id="extractFlags" class="reveal mt-5 space-y-2"></div>
+
+      <div class="reveal mt-6">
+        <div class="bezel"><div class="core !p-0 overflow-x-auto">
+          <div id="matrixWrap" class="p-4 min-h-[200px] grid place-items-center text-ink-soft">No extraction yet.</div>
+        </div></div>
+      </div>
+
+      <div id="stdPanel" class="reveal mt-6 hidden">
+        <div class="flex items-center justify-between mb-3">
+          <p class="eyebrow">Industry Standard Compliance</p>
+          <span id="stdScore" class="mono text-sm font-semibold"></span>
+        </div>
+        <div class="bar mb-4"><i id="stdBar" style="width:0%"></i></div>
+        <div id="stdRows" class="space-y-2"></div>
+        <p id="stdBreach" class="text-sm text-burnt mt-3 font-medium"></p>
+      </div>
+    </section>
+
+    <!-- ============ RESEARCH ============ -->
+    <section id="view-research" class="view px-5 max-w-5xl mx-auto hidden">
+      <div class="reveal">
+        <p class="eyebrow">Industry &amp; Macro</p>
+        <h2 class="display text-3xl sm:text-4xl font-semibold mt-3">Sourced research, with your judgement on top</h2>
+        <p class="text-ink-soft mt-2 max-w-xl">Tell ATLAS the sector and the supportive context you already hold. It runs validated web research and folds your notes into the dossier.</p>
+      </div>
+
+      <div class="reveal mt-8 grid lg:grid-cols-2 gap-5">
+        <div class="bezel"><div class="core space-y-4">
+          <div>
+            <label class="text-sm font-medium">Sector</label>
+            <input id="rSector" class="field mt-1" placeholder="e.g. sustainable drinkware manufacturing" />
+          </div>
+          <div>
+            <label class="text-sm font-medium">Client / entity</label>
+            <input id="rEntity" class="field mt-1" placeholder="e.g. Green Solutions Manufacturing Ltd" />
+          </div>
+          <div>
+            <label class="text-sm font-medium">Supportive information (analyst notes)</label>
+            <textarea id="rNotes" rows="4" class="field mt-1" placeholder="Regulatory tailwinds, customer concentration, management quality…"></textarea>
+          </div>
+          <div>
+            <label class="text-sm font-medium">Macro assumptions</label>
+            <textarea id="rMacro" rows="3" class="field mt-1" placeholder="Rate path, demand outlook, input-cost view…"></textarea>
+          </div>
+          <button id="runResearch" class="btn btn-amber w-full justify-center">
+            <span id="rLabel">Run sourced research</span><span class="ic">→</span>
+          </button>
+          <p class="text-xs text-ink-soft">Research requires TAVILY_API_KEY on the server. Without it, ATLAS shows a clear "research disabled" note instead of running live search.</p>
+        </div></div>
+
+        <div class="bezel"><div class="core">
+          <div class="flex items-center justify-between">
+            <p class="eyebrow">Dossier</p>
+            <span id="rConf" class="text-xs mono text-ink-soft"></span>
+          </div>
+          <div id="dossier" class="markdown mt-3 max-h-[520px] overflow-y-auto pr-2 text-sm leading-relaxed text-ink-soft">
+            <span class="text-ink-soft">Run research to populate a cited, validated dossier.</span>
+          </div>
+        </div></div>
+      </div>
+    </section>
+
+    <!-- ============ STANDARDS ============ -->
+    <section id="view-standards" class="view px-5 max-w-5xl mx-auto hidden">
+      <div class="reveal">
+        <p class="eyebrow">Industry Standard</p>
+        <h2 class="display text-3xl sm:text-4xl font-semibold mt-3">Your benchmark, your call</h2>
+        <p class="text-ink-soft mt-2 max-w-xl">Define the ratio thresholds that constitute an acceptable credit. ATLAS stores them per deployment and uses them to frame the obligor against the sector norm.</p>
+      </div>
+
+      <div class="reveal mt-8">
+        <div class="bezel"><div class="core">
+          <div class="flex items-center justify-between mb-4">
+            <input id="stdName" class="field !w-auto !py-2 font-display font-semibold" value="Default industry standard" />
+            <button id="saveStd" class="btn btn-amber"><span>Save standard</span><span class="ic">✓</span></button>
+          </div>
+          <div id="stdTable" class="space-y-2"></div>
+          <p id="stdStatus" class="text-sm text-ink-soft mt-3"></p>
+        </div></div>
+      </div>
+
+      <div class="mt-6">
+        <p class="eyebrow">Next steps</p>
+        <div class="flex flex-wrap gap-3 mt-3">
+          <button class="btn btn-ghost" data-view="report"><span>Generate branded report</span><span class="ic">→</span></button>
+          <button class="btn btn-ghost" data-view="memo"><span>Run AI credit memo</span><span class="ic">→</span></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ REPORT ============ -->
+    <section id="view-report" class="view px-5 max-w-4xl mx-auto hidden">
+      <div class="reveal">
+        <p class="eyebrow">Branded Credit Report</p>
+        <h2 class="display text-3xl sm:text-4xl font-semibold mt-3">Engagement cover &amp; export</h2>
+        <p class="text-ink-soft mt-2 max-w-xl">Set the engagement details. ATLAS synthesises the full analysis, live research and standards into a branded PDF or Word document.</p>
+      </div>
+
+      <div class="reveal mt-8">
+        <div class="bezel"><div class="core space-y-4">
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm font-medium">Analyst name</label>
+              <input id="rptAnalyst" class="field mt-1" value="Lawrence Oladeji" />
+            </div>
+            <div>
+              <label class="text-sm font-medium">Client / company</label>
+              <input id="rptCompany" class="field mt-1" value="Green Solutions Manufacturing Ltd" />
+            </div>
+          </div>
+          <div>
+            <label class="text-sm font-medium">Engagement question / purpose of report</label>
+            <textarea id="rptPurpose" rows="3" class="field mt-1" placeholder="The question this report must answer, e.g. Is the client creditworthy for additional facilities?"></textarea>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="flex items-center gap-2 text-sm">
+              <input id="rptAgent" type="checkbox" class="accent-amber" /> Include LLM assessment (needs LLM key)
+            </label>
+            <span class="text-xs text-ink-soft">Source:</span>
+            <label class="flex items-center gap-1 text-sm"><input type="radio" name="rptsrc" value="current" class="accent-amber" /> Current extraction</label>
+            <label class="flex items-center gap-1 text-sm"><input type="radio" name="rptsrc" value="sc" checked class="accent-amber" /> SC workbook</label>
+          </div>
+          <button id="genReport" class="btn btn-amber"><span id="rptLabel">Generate branded report</span><span class="ic">→</span></button>
+        </div></div>
+      </div>
+
+      <div id="rptOut" class="reveal mt-6 hidden">
+        <div class="flex flex-wrap items-center justify-between mb-3">
+          <p class="eyebrow">Preview</p>
+          <div class="flex gap-2">
+            <button id="dlPdf" class="btn btn-ghost"><span>Download PDF</span><span class="ic">↓</span></button>
+            <button id="dlDocx" class="btn btn-ghost"><span>Download Word</span><span class="ic">↓</span></button>
+          </div>
+        </div>
+        <div class="bezel"><div class="core !p-0">
+          <div id="rptPreview" class="markdown p-6 max-h-[70vh] overflow-y-auto text-sm leading-relaxed"></div>
+        </div></div>
+      </div>
+    </section>
+
+    <!-- ============ MEMO ============ -->
+    <section id="view-memo" class="view px-5 max-w-4xl mx-auto hidden">
+      <div class="reveal">
+        <p class="eyebrow">Live AI Assessment</p>
+        <h2 class="display text-3xl sm:text-4xl font-semibold mt-3">Generate credit memo</h2>
+        <p class="text-ink-soft mt-2 max-w-xl">Run the autonomous credit agent end-to-end (verified analysis + live sourced research + recommendation) and download the memo. Requires an LLM key (Groq or NVIDIA NIM).</p>
+      </div>
+
+      <div class="reveal mt-8">
+        <div class="bezel"><div class="core space-y-4">
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm font-medium">Client / company</label>
+              <input id="memoEntity" class="field mt-1" placeholder="e.g. Green Solutions Manufacturing Ltd" />
+            </div>
+            <div>
+              <label class="text-sm font-medium">Workbook path (optional)</label>
+              <input id="memoPath" class="field mt-1" value="data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx" />
+            </div>
+          </div>
+          <button id="genMemo" class="btn btn-amber"><span id="memoLabel">Generate AI credit memo</span><span class="ic">→</span></button>
+          <p id="memoErr" class="text-xs text-red-700 hidden"></p>
+        </div></div>
+      </div>
+
+      <div id="memoOut" class="reveal mt-6 hidden">
+        <div class="flex flex-wrap items-center justify-between mb-3">
+          <p class="eyebrow">Memo</p>
+          <div class="flex gap-2">
+            <button id="dlMemo" class="btn btn-ghost"><span>Download .md</span><span class="ic">↓</span></button>
+          </div>
+        </div>
+        <div class="bezel"><div class="core !p-0">
+          <div id="memoPreview" class="markdown p-6 max-h-[70vh] overflow-y-auto text-sm leading-relaxed"></div>
+        </div></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const fmt = (n) => (n == null || isNaN(n)) ? null : Number(n);
+const show = (v) => fmt(v) == null ? "—" : Number(v).toLocaleString("en-US", {maximumFractionDigits: 1});
+const MD = (s) => (window.marked && window.marked.parse) ? window.marked.parse(s || "") : (s || "");
+window.addEventListener("error", (e) => {
+  let b = document.getElementById("errBanner");
+  if(!b){ b = document.createElement("div"); b.id="errBanner";
+    b.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:99;background:#7f1d1d;color:#fff;font:13px/1.5 monospace;padding:10px 14px;white-space:pre-wrap;";
+    document.body.appendChild(b); }
+  b.textContent = "JS error: " + (e.message || e.error) + (e.filename ? " @ " + e.filename + ":" + e.lineno : "");
+});
+
+let STATE = { files: [], result: null };
+
+// ---------- view routing ----------
+const views = ["ingest","extract","research","standards","report","memo"];
+function showView(name){
+  views.forEach(v => $("#view-"+v).classList.toggle("hidden", v!==name));
+  $$(".nav-link").forEach(b => b.classList.toggle("active", b.dataset.view===name));
+  if(name==="standards") loadStandards();
+  if(name==="extract") renderExtract();
+  window.scrollTo({top:0, behavior:"smooth"});
+  observeReveals();
+}
+$$("[data-view]").forEach(b => b.addEventListener("click", e => { e.preventDefault(); showView(b.dataset.view); closeMenu(); }));
+
+// mobile menu
+const burger = $("#burger");
+function closeMenu(){ $("#mobileMenu").classList.add("hidden"); }
+burger.addEventListener("click", () => $("#mobileMenu").classList.toggle("hidden"));
+
+// reveals
+let io;
+function observeReveals(){
+  if(io) io.disconnect();
+  io = new IntersectionObserver((entries)=>{
+    entries.forEach((en,i)=>{ if(en.isIntersecting){ setTimeout(()=>en.target.classList.add("in"), i*60); io.unobserve(en.target);} });
+  }, {threshold:0.12});
+  $$(".reveal").forEach(el=>{ if(!el.classList.contains("in")) io.observe(el); });
+}
+observeReveals();
+
+// ---------- ingest ----------
+const dz = $("#dropzone"), fi = $("#fileInput");
+dz.addEventListener("click", ()=>fi.click());
+fi.addEventListener("change", e => addFiles(e.target.files));
+["dragenter","dragover"].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault(); dz.classList.add("drag");}));
+["dragleave","drop"].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault(); dz.classList.remove("drag");}));
+dz.addEventListener("drop", e => addFiles(e.dataTransfer.files));
+
+function addFiles(fileList){
+  const cur = new Date().getFullYear();
+  [...fileList].forEach(f=>{
+    const ext = (f.name.split(".").pop()||"").toLowerCase();
+    STATE.files.push({ file:f, name:f.name, type:ext, year:cur, entity:"" });
+  });
+  renderFiles();
+}
+function renderFiles(){
+  const wrap = $("#fileList");
+  wrap.innerHTML = "";
+  STATE.files.forEach((it,i)=>{
+    const chip = document.createElement("div");
+    chip.className = "file-chip p-3 flex flex-wrap items-center gap-3";
+    const icon = it.type==="pdf" ? "PDF" : "XLS";
+    chip.innerHTML = `
+      <div class="w-10 h-10 rounded-xl bg-ink text-paper grid place-items-center text-[10px] font-mono">${icon}</div>
+      <div class="min-w-[140px] flex-1">
+        <p class="font-medium text-sm truncate">${it.name}</p>
+        <p class="text-xs text-ink-soft mono">${it.type.toUpperCase()}</p>
+      </div>
+      <label class="text-xs text-ink-soft">FY
+        <input data-k="year" data-i="${i}" type="number" value="${it.year}" class="field !w-20 !py-1 !px-2 mono text-sm" />
+      </label>
+      <input data-k="entity" data-i="${i}" value="${it.entity}" placeholder="entity (opt)" class="field !w-40 !py-1 !px-2 text-sm" />
+      <button data-del="${i}" class="w-8 h-8 grid place-items-center rounded-full hover:bg-ink/5 text-ink-soft">✕</button>`;
+    wrap.appendChild(chip);
+  });
+  $$("#fileList [data-k]").forEach(inp=>inp.addEventListener("input",e=>{
+    STATE.files[+e.target.dataset.i][e.target.dataset.k] = e.target.value;
+  }));
+  $$("#fileList [data-del]").forEach(b=>b.addEventListener("click",e=>{
+    STATE.files.splice(+e.target.dataset.del,1); renderFiles();
+  }));
+  const has = STATE.files.length>0;
+  $("#extractBtn").disabled = !has;
+  $("#ingestHint").textContent = has ? `${STATE.files.length} file(s) ready · tag each with its fiscal year.` : "Add at least one file to begin.";
+}
+
+$("#extractBtn").addEventListener("click", async ()=>{
+  if(!STATE.files.length) return;
+  const btn = $("#extractBtn"); btn.disabled = true;
+  $("#extractLabel").textContent = "Extracting";
+  $("#extractLabel").insertAdjacentHTML("beforebegin", `<span class="spinner"></span>`);
+  try {
+    const fd = new FormData();
+    STATE.files.forEach(f=>fd.append("files", f.file));
+    fd.append("meta", JSON.stringify(STATE.files.map(f=>({year:+f.year, entity:f.entity||null}))));
+    const res = await fetch("/api/ingest", {method:"POST", body:fd});
+    const data = await res.json();
+    if(data.error){ alert("Ingestion error: "+data.error); return; }
+    STATE.result = data;
+    showView("extract");
+  } catch(e){ alert("Network error: "+e.message); }
+  finally { btn.disabled=false; $("#extractLabel").previousSibling?.remove?.(); $("#extractLabel").textContent="Extract values"; }
+});
+
+// ---------- extract ----------
+function renderExtract(){
+  const r = STATE.result;
+  if(!r){ $("#matrixWrap").textContent="No extraction yet."; return; }
+  $("#extractTitle").textContent = r.entity_name || "Spread financials";
+  $("#extractMeta").textContent = `${r.currency||"currency n/a"} · fiscal years: ${(r.matrix?.years||[]).join(", ")}`;
+
+  // flags
+  const fw = $("#extractFlags"); fw.innerHTML="";
+  (r.flags||[]).forEach(f=>{
+    const c = f.level==="warning" ? "text-burnt bg-burnt/10" : "text-amber-deep bg-amber/10";
+    const d = document.createElement("div");
+    d.className = `inline-flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-full ${c}`;
+    d.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-current"></span>${f.message}`;
+    fw.appendChild(d);
+  });
+
+  const m = r.matrix; if(!m){return;}
+  const years = m.years;
+  let html = `<table class="matrix"><thead><tr><th>Line item</th><th>Statement</th>`;
+  years.forEach(y=>html+=`<th>${y}</th>`);
+  html += `</tr></thead><tbody>`;
+  m.rows.forEach(row=>{
+    html += `<tr><td class="font-medium">${row.label}</td><td><span class="grp-tag">${row.group}</span></td>`;
+    years.forEach(y=>{
+      const v = row.values[y];
+      html += `<td class="${fmt(v)==null?'miss':''} mono">${show(v)}</td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</tbody></table>`;
+  html += `<p class="text-xs text-ink-soft mt-3 px-1">Values in thousands of the reporting currency unless stated. Missing cells indicate undisclosed or unparsed line items.</p>`;
+  $("#matrixWrap").innerHTML = html;
+
+  renderStandards();
+}
+
+function renderStandards(){
+  const sa = STATE.result?.standards_assessment;
+  const panel = $("#stdPanel");
+  if(!sa){ panel.classList.add("hidden"); return; }
+  panel.classList.remove("hidden"); panel.classList.add("in");
+  const pct = Math.round((sa.compliance_score||0)*100);
+  $("#stdScore").textContent = `${pct}% compliance · ${(sa.coverage*100).toFixed(0)}% coverage`;
+  $("#stdBar").style.width = pct + "%";
+  const wrap = $("#stdRows"); wrap.innerHTML="";
+  sa.evaluated.forEach(e=>{
+    const pass = e.status==="pass", nodata = e.status==="no_data";
+    const cls = nodata ? "text-ink-soft" : pass ? "text-[#16A34A]" : "text-burnt";
+    const mark = nodata ? "—" : pass ? "✓" : "✕";
+    const v = e.value==null ? "—" : Number(e.value).toLocaleString("en-US",{maximumFractionDigits:2});
+    const row = document.createElement("div");
+    row.className="flex items-center justify-between text-sm bg-paper-2 rounded-xl px-3 py-2";
+    row.innerHTML = `<span class="font-medium">${e.label}</span>
+      <span class="mono ${cls}">${mark}</span>
+      <span class="mono text-ink-soft text-xs">${v} ${e.operator} ${e.threshold}</span>`;
+    wrap.appendChild(row);
+  });
+  $("#stdBreach").textContent = sa.breaches?.length ? "Breaches: " + sa.breaches.join(", ") : "Meets industry standard ✓";
+}
+
+function download(name, content, type){
+  const blob = new Blob([content], {type});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+$("#dlCsv").addEventListener("click", ()=>{
+  const r = STATE.result; if(!r) return;
+  const m = r.matrix, years = m.years;
+  let csv = "Line item,Statement," + years.join(",") + "\n";
+  m.rows.forEach(row=>{
+    const vals = years.map(y=>{ const v=row.values[y]; return fmt(v)==null?"":v; });
+    csv += `"${row.label}","${row.group}",${vals.join(",")}\n`;
+  });
+  download("extraction.csv", csv, "text/csv");
+});
+$("#dlJson").addEventListener("click", ()=>{
+  const r = STATE.result; if(!r) return;
+  download("extraction.json", JSON.stringify(r, null, 2), "application/json");
+});
+
+// ---------- research ----------
+$("#runResearch").addEventListener("click", async ()=>{
+  const btn = $("#runResearch"); btn.disabled=true;
+  $("#rLabel").textContent="Researching"; $("#rLabel").insertAdjacentHTML("beforebegin",`<span class="spinner"></span>`);
+  try {
+    const body = {
+      sector: $("#rSector").value || null,
+      entity: $("#rEntity").value || null,
+      user_notes: $("#rNotes").value || null,
+      macro_assumptions: $("#rMacro").value || null,
+    };
+    const res = await fetch("/api/research", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    const d = await res.json();
+    if(d.note){
+      $("#dossier").innerHTML = `<p class="text-burnt font-medium">${d.note}</p>`;
+      $("#rConf").textContent="";
+      return;
+    }
+    $("#dossier").innerHTML = MD(d.dossier_markdown||"");
+    const rep = d.report||{};
+    $("#rConf").textContent = `conf ${(rep.overall_confidence??0).toFixed(2)} · ${rep.sources?.length||0} src`;
+  } catch(e){ $("#dossier").textContent = "Error: "+e.message; }
+  finally { btn.disabled=false; $("#rLabel").previousSibling?.remove?.(); $("#rLabel").textContent="Run sourced research"; }
+});
+
+// ---------- standards ----------
+async function loadStandards(){
+  try {
+    const d = await (await fetch("/api/standards")).json();
+    $("#stdName").value = d.name || "Industry standard";
+    const t = $("#stdTable"); t.innerHTML="";
+    (d.thresholds||[]).forEach((th,i)=>{
+      const row = document.createElement("div");
+      row.className="flex flex-wrap items-center gap-3 bg-paper-2 rounded-xl p-3";
+      row.innerHTML = `
+        <span class="font-medium text-sm flex-1 min-w-[180px]">${th.label}</span>
+        <select data-i="${i}" data-k="operator" class="field !w-20 !py-1 text-sm">
+          ${[" >=",">","<=","<"].map(o=>`<option ${th.operator===o.trim()?"selected":""}>${o.trim()}</option>`).join("")}
+        </select>
+        <input data-i="${i}" data-k="value" type="number" step="0.01" value="${th.value}" class="field !w-28 !py-1 mono text-sm" />
+        <span class="text-xs text-ink-soft mono">wt ${th.weight??1}</span>`;
+      t.appendChild(row);
+    });
+    $$("#stdTable [data-k]").forEach(inp=>inp.addEventListener("input",e=>{
+      const i=+e.target.dataset.i, k=e.target.dataset.k;
+      STD_CACHE.thresholds[i][k] = k==="value" ? +e.target.value : e.target.value;
+    }));
+    STD_CACHE = d;
+  } catch(e){ $("#stdStatus").textContent="Could not load standards."; }
+}
+let STD_CACHE = {name:"", thresholds:[]};
+$("#stdName").addEventListener("input", e=>STD_CACHE.name=e.target.value);
+$("#saveStd").addEventListener("click", async ()=>{
+  const res = await fetch("/api/standards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(STD_CACHE)});
+  $("#stdStatus").textContent = res.ok ? "Saved ✓" : "Save failed.";
+});
+
+// ---------- report ----------
+let RPT = {pdf:null, docx:null};
+function b64toBlob(b64, type){
+  const bin = atob(b64); const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return new Blob([arr], {type});
+}
+function downloadBlob(blob, name){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+$("#genReport").addEventListener("click", async ()=>{
+  const btn=$("#genReport"); btn.disabled=true;
+  $("#rptLabel").textContent="Generating"; $("#rptLabel").insertAdjacentHTML("beforebegin",`<span class="spinner"></span>`);
+  try {
+    const src = document.querySelector('input[name="rptsrc"]:checked').value;
+    const body = {
+      analyst_name: $("#rptAnalyst").value,
+      company_name: $("#rptCompany").value || (STATE.result?.entity_name) || "Client",
+      purpose: $("#rptPurpose").value || null,
+      run_agent: $("#rptAgent").checked,
+    };
+    if(src==="current" && STATE.result){
+      body.periods = STATE.result.periods;
+    } else {
+      body.workbook_path = "data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx";
+    }
+    const res = await fetch("/api/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const d = await res.json();
+    if(d.error){ alert("Report error: "+d.error); return; }
+    RPT.pdf=d.pdf_base64; RPT.docx=d.docx_base64;
+    $("#rptPreview").innerHTML = MD(d.html);
+    $("#rptOut").classList.remove("hidden"); $("#rptOut").classList.add("in");
+  } catch(e){ alert("Error: "+e.message); }
+  finally { btn.disabled=false; $("#rptLabel").previousSibling?.remove?.(); $("#rptLabel").textContent="Generate branded report"; }
+});
+$("#dlPdf").addEventListener("click", ()=>{ if(RPT.pdf) downloadBlob(b64toBlob(RPT.pdf,"application/pdf"), "credit_assessment.pdf"); });
+$("#dlDocx").addEventListener("click", ()=>{ if(RPT.docx) downloadBlob(b64toBlob(RPT.docx,"application/vnd.openxmlformats-officedocument.wordprocessingml.document"), "credit_assessment.docx"); });
+
+// ---------- memo (live AI agent, background task + polling) ----------
+let MEMO_MD = "";
+let MEMO_POLL = null;
+async function pollMemo(taskId){
+  for(let i=0;i<90;i++){
+    await new Promise(r=>setTimeout(r,2000));
+    let s;
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(()=>ctrl.abort(), 15000);
+      const resp = await fetch("/api/agent/"+taskId, {signal: ctrl.signal});
+      clearTimeout(to);
+      s = await resp.json();
+    } catch(e){
+      $("#memoErr").textContent="Polling error: "+e.message+" — is the server still running?";
+      $("#memoErr").classList.remove("hidden");
+      return;
+    }
+    if(s.status==="done"){
+      const d = s.result;
+      MEMO_MD = d.markdown;
+      $("#memoPreview").innerHTML = MD(d.markdown);
+      $("#memoOut").classList.remove("hidden"); $("#memoOut").classList.add("in");
+      return;
+    }
+    if(s.status==="error"){
+      $("#memoErr").textContent="Agent error: "+(s.error||"unknown"); $("#memoErr").classList.remove("hidden");
+      return;
+    }
+    $("#memoLabel").textContent="Running agent ("+((i+1)*2)+"s)";
+  }
+  $("#memoErr").textContent="Agent is taking too long — try again or check the server log.";
+  $("#memoErr").classList.remove("hidden");
+}
+$("#genMemo").addEventListener("click", async ()=>{
+  const btn=$("#genMemo"); btn.disabled=true;
+  $("#memoErr").classList.add("hidden");
+  try {
+    const res = await fetch("/api/agent",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({path:$("#memoPath").value||null, entity:$("#memoEntity").value||null})});
+    const d = await res.json();
+    if(d.error){ $("#memoErr").textContent=d.error; $("#memoErr").classList.remove("hidden"); btn.disabled=false; return; }
+    await pollMemo(d.task_id);
+  } catch(e){ $("#memoErr").textContent="Error: "+e.message; $("#memoErr").classList.remove("hidden"); }
+  finally { btn.disabled=false; $("#memoLabel").textContent="Generate AI credit memo"; }
+});
+$("#dlMemo").addEventListener("click", ()=>{ if(MEMO_MD) downloadBlob(new Blob([MEMO_MD],{type:"text/markdown"}), "credit_memo.md"); });
+
+showView("ingest");
+</script>
+</body>
+</html>

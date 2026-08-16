@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Node (playwright dev dependency)
+node_modules/
+package-lock.json
+
+# Runtime / ephemeral
+server.log
+server.err
+data/uploads/
+output/
+data/standards.json
+
+# Secrets
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
