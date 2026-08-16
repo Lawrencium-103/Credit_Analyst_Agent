@@ -24,6 +24,9 @@ agent = ["langgraph>=0.2", "langchain>=0.2"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.vercel]
+entrypoint = "credit_agent.api.app:app"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

@@ -1,0 +1,14 @@
+# Runtime dependencies for the Vercel serverless deployment.
+# The local package is installed editable so `import credit_agent` works.
+-e .
+fastapi
+starlette
+pydantic
+pandas
+numpy
+openpyxl
+reportlab
+python-docx
+httpx
+tavily-python
+python-multipart

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": null,
+  "outputDirectory": null,
+  "env": {
+    "PYTHONPATH": "src"
+  },
+  "functions": {
+    "src/credit_agent/api/app.py": {
+      "maxDuration": 120,
+      "memory": 1024
+    }
+  }
+}
