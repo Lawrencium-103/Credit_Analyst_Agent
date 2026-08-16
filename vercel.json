@@ -6,7 +6,7 @@
     "PYTHONPATH": "src"
   },
   "functions": {
-    "src/credit_agent/api/app.py": {
+    "vercel_app.py": {
       "maxDuration": 120,
       "memory": 1024
     }
