@@ -1,9 +1,11 @@
-"""Heuristic PDF financial-statement parser.
+"""PDF financial-statement parser.
 
-PDFs are not a structured format, so this is a *draft* extractor: it pulls the
-most common line items via label/number heuristics and flags the whole period as
-low-confidence so a human spreads it properly. It never invents precision it
-cannot find.
+Uses a two-stage approach:
+  1. PDF → Markdown → table extraction (structured, high-confidence)
+  2. Fallback: keyword/number heuristics on raw text (low-confidence)
+
+The Markdown stage handles well-formatted PDFs with tables. The heuristic
+stage catches unstructured PDFs where tables aren't preserved.
 """
 
 from __future__ import annotations
@@ -13,12 +15,14 @@ import re
 import fitz
 
 from ..schema.financials import BalanceSheet, CashFlow, IncomeStatement, PeriodFinancials
+from .pdf_to_md import extract_line_items_from_table, find_financial_table, pdf_to_markdown
 
 _NUMBER_RE = re.compile(
     r"\(?-?\$?\s*[\d,]+(?:\.\d+)?\)?|\(?-?\$?\s*\d{1,3}(?:,\d{3})+(?:\.\d+)?\)?",
     re.IGNORECASE,
 )
 
+# Canonical line-item keywords → schema field name
 _LABEL_MAP = [
     ("revenue", ["total revenue", "net revenue", "revenue", "net sales", "sales"]),
     ("cogs", ["cost of sales", "cost of revenue", "cogs"]),
@@ -70,12 +74,9 @@ def _first_number_after(text: str, pos: int) -> float | None:
     return None
 
 
-def parse_pdf(path: str, year: str, entity: str | None = None) -> PeriodFinancials:
-    doc = fitz.open(path)
-    text = "\n".join(page.get_text() for page in doc)
-    doc.close()
+def _parse_heuristic(text: str) -> dict[str, float | None]:
+    """Keyword/number heuristic — low confidence, used as fallback."""
     text_lower = text.lower()
-
     found: dict[str, float | None] = {}
     for field, keywords in _LABEL_MAP:
         for kw in keywords:
@@ -85,6 +86,43 @@ def parse_pdf(path: str, year: str, entity: str | None = None) -> PeriodFinancia
                 if val is not None:
                     found[field] = val
                     break
+    return found
+
+
+def _parse_markdown(md: str) -> dict[str, float | None]:
+    """Parse Markdown tables for line items — structured, higher confidence."""
+    table = find_financial_table(md)
+    if not table:
+        return {}
+    raw = extract_line_items_from_table(table)
+
+    # Map raw labels to canonical field names
+    result: dict[str, float | None] = {}
+    for field, keywords in _LABEL_MAP:
+        for label, value in raw.items():
+            if any(kw in label for kw in keywords):
+                result[field] = value
+                break
+
+    return result
+
+
+def parse_pdf(path: str, year: str, entity: str | None = None) -> PeriodFinancials:
+    """Parse a PDF into a PeriodFinancials object.
+
+    Tries Markdown table extraction first (structured, high-confidence),
+    then falls back to keyword/number heuristics (low-confidence).
+    """
+    # Stage 1: PDF → Markdown → table extraction
+    md = pdf_to_markdown(path)
+    found = _parse_markdown(md)
+
+    # Stage 2: Fallback to heuristic if Markdown found too little
+    if len(found) < 3:
+        doc = fitz.open(path)
+        text = "\n".join(page.get_text() for page in doc)
+        doc.close()
+        found = _parse_heuristic(text)
 
     return PeriodFinancials(
         period=str(year),
