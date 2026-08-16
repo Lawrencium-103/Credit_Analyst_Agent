@@ -56,5 +56,16 @@ def test_report_endpoint_runs():
                                     "workbook_path": "data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx"})
     assert r.status_code == 200
     d = r.json()
-    assert d["pdf_base64"] and d["docx_base64"]
+    assert "cover" in d and "html" in d
     assert "Lawrence Oladeji" in d["html"] or "Credit Assessment" in d["html"]
+
+
+def test_report_download_pdf():
+    c = TestClient(app)
+    r = c.post("/api/report/download?format=pdf", json={
+        "analyst_name": "Test", "company_name": "Client",
+        "workbook_path": "data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx",
+    })
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content[:4] == b"%PDF"

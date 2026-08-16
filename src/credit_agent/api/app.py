@@ -13,12 +13,13 @@ import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from ..api.logic import (
     DEFAULT_STANDARDS,
     assess_standards,
+    build_report_file,
     build_report_response,
     ingest_and_analyze,
     research_response,
@@ -131,6 +132,22 @@ def build_report(req: ReportReq):
     if "error" in out:
         return JSONResponse(status_code=400, content=out)
     return out
+
+
+@app.post("/api/report/download")
+def download_report(req: ReportReq, format: str = "pdf"):
+    body = req.model_dump()
+    if format not in ("pdf", "docx"):
+        return JSONResponse(status_code=400, content={"error": "format must be pdf or docx"})
+    data = build_report_file(body, format)
+    if data is None:
+        return JSONResponse(status_code=400, content={"error": "failed to generate file"})
+    media = "application/pdf" if format == "pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    return StreamingResponse(
+        iter([data]),
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="credit_assessment.{format}"'},
+    )
 
 
 # --------------------------------------------------------------------------- #

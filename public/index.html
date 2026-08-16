@@ -673,17 +673,28 @@ $("#genReport").addEventListener("click", async ()=>{
     } else {
       body.workbook_path = "data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx";
     }
+    STATE.reportBody = body;
     const res = await fetch("/api/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await res.json();
     if(d.error){ alert("Report error: "+d.error); return; }
-    RPT.pdf=d.pdf_base64; RPT.docx=d.docx_base64;
     $("#rptPreview").innerHTML = MD(d.html);
     $("#rptOut").classList.remove("hidden"); $("#rptOut").classList.add("in");
   } catch(e){ alert("Error: "+e.message); }
   finally { btn.disabled=false; $("#rptLabel").previousSibling?.remove?.(); $("#rptLabel").textContent="Generate branded report"; }
 });
-$("#dlPdf").addEventListener("click", ()=>{ if(RPT.pdf) downloadBlob(b64toBlob(RPT.pdf,"application/pdf"), "credit_assessment.pdf"); });
-$("#dlDocx").addEventListener("click", ()=>{ if(RPT.docx) downloadBlob(b64toBlob(RPT.docx,"application/vnd.openxmlformats-officedocument.wordprocessingml.document"), "credit_assessment.docx"); });
+async function downloadReport(fmt){
+  if(!STATE.reportBody){ alert("Generate a report first."); return; }
+  const ext = fmt==="pdf" ? "pdf" : "docx";
+  const mime = fmt==="pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  try {
+    const r = await fetch("/api/report/download?format="+fmt,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(STATE.reportBody)});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); alert("Download error: "+(e.error||r.statusText)); return; }
+    const blob = await r.blob();
+    downloadBlob(blob, "credit_assessment."+ext);
+  } catch(e){ alert("Download failed: "+e.message); }
+}
+$("#dlPdf").addEventListener("click", ()=>downloadReport("pdf"));
+$("#dlDocx").addEventListener("click", ()=>downloadReport("docx"));
 
 // ---------- memo (live AI agent, synchronous serverless call) ----------
 let MEMO_MD = "";

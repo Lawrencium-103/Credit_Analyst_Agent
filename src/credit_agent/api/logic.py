@@ -119,7 +119,8 @@ def _company_from_req(body: dict) -> CompanyFinancials:
     raise ValueError("Provide periods or a valid workbook_path.")
 
 
-def build_report_response(body: dict) -> dict:
+def _assemble_report(body: dict) -> dict | tuple:
+    """Build the report dict from a request body. Returns dict or {"error": ...}."""
     try:
         company = _company_from_req(body)
     except Exception as e:
@@ -155,7 +156,7 @@ def build_report_response(body: dict) -> dict:
         except Exception:
             llm_md = None
 
-    report = assemble_report(
+    return assemble_report(
         analyst_name=body.get("analyst_name"),
         company_name=body.get("company_name", "Client"),
         purpose=body.get("purpose"),
@@ -166,12 +167,29 @@ def build_report_response(body: dict) -> dict:
         standards_assessment=standards,
         llm_assessment_markdown=llm_md,
     )
+
+
+def build_report_response(body: dict) -> dict:
+    """Return HTML preview + cover only (small payload for Vercel's 4.5 MB limit)."""
+    report = _assemble_report(body)
+    if isinstance(report, dict) and "error" in report:
+        return report
     return {
         "cover": report["cover"],
         "html": export_html(report),
-        "pdf_base64": base64.b64encode(export_pdf(report)).decode("ascii"),
-        "docx_base64": base64.b64encode(export_docx(report)).decode("ascii"),
     }
+
+
+def build_report_file(body: dict, fmt: str) -> bytes | None:
+    """Return raw PDF or DOCX bytes for a separate download endpoint."""
+    report = _assemble_report(body)
+    if isinstance(report, dict) and "error" in report:
+        return None
+    if fmt == "pdf":
+        return export_pdf(report)
+    if fmt == "docx":
+        return export_docx(report)
+    return None
 
 
 def run_agent_response(body: dict) -> dict:
