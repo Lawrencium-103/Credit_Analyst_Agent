@@ -8,7 +8,7 @@
   "functions": {
     "vercel_app.py": {
       "maxDuration": 120,
-      "memory": 1024
+      "memory": 3008
     }
   }
 }

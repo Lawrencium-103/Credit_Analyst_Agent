@@ -4,13 +4,32 @@ Vercel resolves the ``tool.vercel.entrypoint`` module path to a file relative to
 the project root, so it cannot find ``src/credit_agent/api/app.py``. This thin
 file sits at the repo root, puts ``src`` on the path, and re-exports the FastAPI
 ``app`` from the package.
+
+If the app fails to import (e.g. a missing dependency at cold start), we still
+expose an ASGI app that returns JSON — so the SPA gets a parseable error instead
+of Vercel's HTML error page.
 """
 
 import os
 import sys
+import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
-from credit_agent.api.app import app  # noqa: E402,F401
+try:
+    from credit_agent.api.app import app  # noqa: E402,F401
+except Exception as _import_err:  # pragma: no cover - defensive
+    _error = traceback.format_exc()
 
-__all__ = ["app"]
+    from starlette.responses import JSONResponse
+
+    async def app(scope, receive, send):
+        if scope["type"] == "lifespan":
+            return
+        response = JSONResponse(
+            {"error": "import_failed", "detail": _error},
+            status_code=500,
+        )
+        await response(scope, receive, send)
+
+    app = app  # keep name

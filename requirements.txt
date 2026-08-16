@@ -1,6 +1,6 @@
 # Runtime dependencies for the Vercel serverless deployment.
-# The local package is installed editable so `import credit_agent` works.
--e .
+# The `credit_agent` package is imported via PYTHONPATH=src (see vercel.json)
+# and the sys.path insert in vercel_app.py — no editable install needed.
 fastapi
 starlette
 pydantic
