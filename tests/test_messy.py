@@ -349,7 +349,8 @@ class TestMessyIngestIntegration:
     def test_sc_workbook_still_works(self):
         SC = "data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx"
         res = ingest([{"path": SC, "year": 2023, "entity": "GS"}])
-        assert res.entity_name == "GS"
+        # SC workbook entity is authoritative; the filename-derived entity is ignored.
+        assert res.entity_name == "Green Solutions Manufacturing Ltd"
         assert [p.period for p in res.periods] == ["2022", "2023"]
         assert res.currency == "USD (thousands)"
 

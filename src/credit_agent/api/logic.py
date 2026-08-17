@@ -42,7 +42,7 @@ from ..spreading.loader import load_sc_workbook
 
 # Repo-root resolvers that work both locally (cwd = project root when running
 # uvicorn) and on Vercel (cwd = project root at function runtime).
-ROOT = Path(os.getcwd()).resolve()
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _example_workbook() -> Path:

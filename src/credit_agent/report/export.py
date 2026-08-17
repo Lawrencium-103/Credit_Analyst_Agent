@@ -85,11 +85,13 @@ def export_pdf(report: dict) -> bytes:
         ("LINEBELOW", (0, 0), (-1, -1), 0.3, colors.HexColor("#E3DDD2")),
     ]))
     flow.append(ct)
-    flow.append(PageBreak())
+    flow.append(Spacer(1, 0.6 * cm))
 
     for b in report["blocks"]:
         k = b["kind"]
-        if k == "h1":
+        if k == "pagebreak":
+            flow.append(PageBreak())
+        elif k == "h1":
             flow.append(Paragraph(escape(b["text"]), h1))
         elif k == "h2":
             flow.append(Paragraph(escape(b["text"]), h2))
@@ -102,6 +104,23 @@ def export_pdf(report: dict) -> bytes:
             items = [ListItem(Paragraph(escape(it), body)) for it in b["items"]]
             flow.append(ListFlowable(items, bulletType="bullet", start="•", leftIndent=12))
             flow.append(Spacer(1, 3))
+        elif k == "banner":
+            bg = {"red": "#B23A3A", "amber": "#C18A1E", "green": "#3F7D4E"}.get(b.get("level", "amber"), "#C18A1E")
+            bt = Table([[Paragraph(f"<b>{escape(b['text'])}</b>",
+                                   ParagraphStyle("bn", parent=body, textColor=colors.white, fontSize=11)),
+                         Paragraph(escape(b.get("detail", "")),
+                                   ParagraphStyle("bnd", parent=small, textColor=colors.white))]],
+                        colWidths=[8 * cm, 8 * cm])
+            bt.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(bg)),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ]))
+            flow.append(bt)
+            flow.append(Spacer(1, 6))
         elif k == "table":
             data = [[Paragraph(f"<b>{escape(h)}</b>", small) for h in b["headers"]]]
             for row in b["rows"]:
@@ -158,7 +177,9 @@ def export_docx(report: dict) -> bytes:
 
     for b in report["blocks"]:
         k = b["kind"]
-        if k in ("h1", "h2", "h3"):
+        if k == "pagebreak":
+            doc.add_page_break()
+        elif k in ("h1", "h2", "h3"):
             p = doc.add_heading(b["text"], level=2 if k == "h2" else 3 if k == "h3" else 1)
             if k == "h2":
                 p.runs[0].font.color.rgb = amber
@@ -167,6 +188,20 @@ def export_docx(report: dict) -> bytes:
         elif k == "bullets":
             for it in b["items"]:
                 doc.add_paragraph(it, style="List Bullet")
+        elif k == "banner":
+            color = {"red": RGBColor(0xB2, 0x3A, 0x3A),
+                     "amber": RGBColor(0xC1, 0x8A, 0x1E),
+                     "green": RGBColor(0x3F, 0x7D, 0x4E)}.get(b.get("level", "amber"), RGBColor(0xC1, 0x8A, 0x1E))
+            pb = doc.add_paragraph()
+            run = pb.add_run(b["text"])
+            run.bold = True
+            run.font.color.rgb = color
+            run.font.size = Pt(12)
+            if b.get("detail"):
+                pd = doc.add_paragraph()
+                rd = pd.add_run(b["detail"])
+                rd.font.color.rgb = color
+                rd.font.size = Pt(9)
         elif k == "table":
             table = doc.add_table(rows=1, cols=len(b["headers"]))
             table.style = "Light Grid Accent 1"
@@ -201,7 +236,9 @@ def export_html(report: dict) -> str:
            f"<b>Date:</b> {escape(cover['generated_at'])}</p><hr>"]
     for b in report["blocks"]:
         k = b["kind"]
-        if k == "h1":
+        if k == "pagebreak":
+            out.append("<hr style='page-break-before:always;border:none;border-top:1px dashed #CC8800;margin:24px 0'>")
+        elif k == "h1":
             out.append(f"<h1>{escape(b['text'])}</h1>")
         elif k == "h2":
             out.append(f"<h2>{escape(b['text'])}</h2>")
@@ -211,6 +248,11 @@ def export_html(report: dict) -> str:
             out.append(f"<p>{escape(b['text'])}</p>")
         elif k == "bullets":
             out.append("<ul>" + "".join(f"<li>{escape(i)}</li>" for i in b["items"]) + "</ul>")
+        elif k == "banner":
+            color = {"red": "#B23A3A", "amber": "#C18A1E", "green": "#3F7D4E"}.get(b.get("level", "amber"), "#C18A1E")
+            out.append(
+                f"<div style='background:{color};color:#fff;padding:12px 16px;border-radius:8px;margin:12px 0'>"
+                f"<strong>{escape(b['text'])}</strong><br><span style='font-size:12px'>{escape(b.get('detail', ''))}</span></div>")
         elif k == "table":
             head = "".join(f"<th>{escape(h)}</th>" for h in b["headers"])
             rows = "".join("<tr>" + "".join(f"<td>{escape(str(c))}</td>" for c in r) + "</tr>"

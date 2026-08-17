@@ -72,7 +72,7 @@ def analysis_bundle_from_company(company) -> dict:
         if r.value is None:
             continue
         ratio_rows.append({
-            "label": r.label, "category": r.category, "value": _round(r.value),
+            "label": r.label, "key": r.key, "category": r.category, "value": _round(r.value),
             "unit": r.unit, "within_healthy_band": r.within_healthy_band,
         })
 

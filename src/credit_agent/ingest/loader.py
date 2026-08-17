@@ -63,8 +63,6 @@ def ingest_file(path: str, year: int, entity: str | None = None) -> tuple[list[P
     if ext in ("xlsx", "xlsm", "xls"):
         if _is_sc(path):
             cf = load_sc_workbook(path)
-            if entity:
-                cf.entity_name = entity
             periods = cf.periods
             flags.append(IngestionFlag(level="info", message=f"Loaded Standard Chartered format ({len(periods)} periods)."))
             periods = _reyear(periods, year)
@@ -123,8 +121,6 @@ def ingest(items: list[dict]) -> IngestionResult:
         try:
             if _is_sc(it["path"]):
                 cf = load_sc_workbook(it["path"])
-                if it.get("entity"):
-                    cf.entity_name = it["entity"]
                 entity_name = cf.entity_name
                 currency = cf.currency
         except Exception:

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ATLAS — Credit Intelligence</title>
+<title>ATLAS — Credit Analysis</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -63,7 +63,6 @@ table.matrix tbody tr:hover{background:rgba(204,136,0,.04)}
 .spinner{width:18px;height:18px;border:2px solid rgba(246,242,236,.4);border-top-color:#F6F2EC;border-radius:999px;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* progress bar */
 .progress{display:flex;align-items:center;gap:0;padding:0;margin:0}
 .progress-step{display:flex;align-items:center;gap:.6rem;padding:.6rem 1.2rem;border-radius:999px;font-size:13px;font-weight:600;color:#B7AE9F;transition:all .4s ease}
 .progress-step .num{width:28px;height:28px;border-radius:999px;background:rgba(22,19,15,.06);display:grid;place-items:center;font-size:12px;font-weight:700;transition:all .4s ease}
@@ -74,23 +73,24 @@ table.matrix tbody tr:hover{background:rgba(204,136,0,.04)}
 .progress-line{width:24px;height:2px;background:rgba(22,19,15,.1);flex-shrink:0}
 .progress-line.done{background:#16A34A}
 
-/* compliance bar */
 .comp-bar{height:8px;border-radius:999px;background:rgba(22,19,15,.06);overflow:hidden}
 .comp-bar>div{height:100%;border-radius:999px;transition:width .6s cubic-bezier(.32,.72,0,1)}
 
-/* collapsible */
 details{border-radius:1.5rem;background:rgba(255,255,255,.6);border:1px solid rgba(22,19,15,.06)}
 details>summary{padding:1rem 1.5rem;font-weight:600;font-family:"Space Grotesk";cursor:pointer;list-style:none;display:flex;align-items:center;gap:.6rem;user-select:none}
 details>summary::-webkit-details-marker{display:none}
 details>summary::after{content:"→";margin-left:auto;color:#B7AE9F;transition:transform .3s ease}
 details[open]>summary::after{transform:rotate(90deg)}
 details>.inner{padding:0 1.5rem 1.5rem}
+
+.format-card{padding:1rem;border-radius:1rem;border:1.5px solid rgba(22,19,15,.08);background:#FBF9F4;text-align:center;transition:all .3s ease;cursor:pointer}
+.format-card:hover{border-color:rgba(204,136,0,.3);background:rgba(204,136,0,.04)}
+.format-card.active{border-color:#CC8800;background:rgba(204,136,0,.08);box-shadow:0 0 0 3px rgba(204,136,0,.12)}
 </style>
 </head>
 <body class="grain">
 <div class="relative z-[2] min-h-[100dvh]">
 
-  <!-- Floating nav -->
   <header class="fixed top-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl">
     <nav class="pill-nav rounded-full px-3 py-2 flex items-center justify-between shadow-sm">
       <div class="flex items-center gap-2 pl-2">
@@ -99,37 +99,33 @@ details>.inner{padding:0 1.5rem 1.5rem}
       </div>
       <div id="progressBar" class="progress hidden sm:flex"></div>
       <div id="navRight" class="flex items-center gap-2 pr-1">
-        <button id="btnStandards" class="btn btn-ghost !py-2 !px-3 !text-xs" title="Configure standards"><span class="mono">⚙</span></button>
+        <button id="btnStandards" class="btn btn-ghost !py-2 !px-3 !text-xs" title="Standards config"><span class="mono">⚙</span></button>
       </div>
     </nav>
   </header>
 
   <main class="pt-28 pb-24">
 
-    <!-- ============================================================ -->
-    <!-- STEP 1 — FILES                                               -->
-    <!-- ============================================================ -->
+    <!-- STEP 1 — FILES -->
     <section id="step-files" class="px-5 max-w-5xl mx-auto">
       <div class="reveal">
-        <p class="eyebrow">Credit Intelligence Platform</p>
+        <p class="eyebrow">Step 1</p>
         <h1 class="display text-4xl sm:text-6xl font-semibold mt-4 leading-[1.05] max-w-3xl">
-          Underwrite with evidence,<br/>not instinct.
+          Upload your financials.
         </h1>
         <p class="text-ink-soft mt-5 max-w-xl text-lg">
-          Drop annual reports, spreadsheets or PDFs — singly or in batches. ATLAS
-          auto-detects the entity, fiscal years and statement types, spreads every
-          line item, and shows you the analysis in one view.
+          Drop XLSX or PDF files. ATLAS reads them, pulls out the line items, and checks them against your standards.
         </p>
       </div>
 
       <div class="reveal mt-10">
         <div class="bezel">
           <div class="core">
-            <div id="dropzone" class="dropzone p-10 text-center cursor-pointer">
-              <div class="w-14 h-14 mx-auto rounded-2xl bg-ink grid place-items-center text-paper text-2xl">+</div>
-              <p class="mt-4 font-display font-semibold text-lg">Drag &amp; drop files here</p>
-              <p class="text-ink-soft text-sm mt-1">XLSX, XLS or PDF · multiple files &amp; types supported</p>
-              <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.pdf" multiple />
+            <div id="dropzone" class="dropzone p-10 text-center" style="position:relative">
+              <div class="w-14 h-14 mx-auto rounded-2xl bg-ink grid place-items-center text-paper text-2xl pointer-events-none">+</div>
+              <p class="mt-4 font-display font-semibold text-lg pointer-events-none">Drop files here</p>
+              <p class="text-ink-soft text-sm mt-1 pointer-events-none">XLSX, XLS or PDF — multiple files OK</p>
+              <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.pdf" multiple style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer" />
             </div>
             <div id="fileList" class="mt-5 space-y-3"></div>
             <div class="mt-6 flex flex-wrap items-center gap-3">
@@ -144,13 +140,10 @@ details>.inner{padding:0 1.5rem 1.5rem}
       </div>
     </section>
 
-    <!-- ============================================================ -->
-    <!-- STEP 2 — ANALYSIS                                            -->
-    <!-- ============================================================ -->
+    <!-- STEP 2 — ANALYSIS -->
     <section id="step-analysis" class="px-5 max-w-5xl mx-auto hidden">
-      <!-- Header -->
       <div class="reveal">
-        <p class="eyebrow">Analysis</p>
+        <p class="eyebrow">Step 2</p>
         <h2 id="analysisTitle" class="display text-3xl sm:text-4xl font-semibold mt-3">—</h2>
         <p id="analysisMeta" class="text-ink-soft mt-1"></p>
       </div>
@@ -188,10 +181,10 @@ details>.inner{padding:0 1.5rem 1.5rem}
         </div>
       </details>
 
-      <!-- Research (collapsible, runs on demand) -->
+      <!-- Research (collapsible) -->
       <details class="reveal mt-6" id="researchDetails">
         <summary>
-          <span class="eyebrow" style="margin:0">Research Dossier</span>
+          <span class="eyebrow" style="margin:0">Research</span>
           <span id="researchStatus" class="text-xs text-ink-soft mono ml-2"></span>
         </summary>
         <div class="inner">
@@ -199,35 +192,35 @@ details>.inner{padding:0 1.5rem 1.5rem}
             <div class="space-y-3">
               <div>
                 <label class="text-xs font-medium text-ink-soft">Sector</label>
-                <input id="rSector" class="field !py-2 !text-sm mt-1" placeholder="e.g. sustainable drinkware manufacturing" />
+                <input id="rSector" class="field !py-2 !text-sm mt-1" placeholder="e.g. manufacturing, fintech" />
               </div>
               <div>
                 <label class="text-xs font-medium text-ink-soft">Analyst notes</label>
-                <textarea id="rNotes" rows="2" class="field !text-sm mt-1" placeholder="Regulatory tailwinds, customer concentration…"></textarea>
+                <textarea id="rNotes" rows="2" class="field !text-sm mt-1" placeholder="Any context you want included"></textarea>
               </div>
               <button id="runResearch" class="btn btn-amber !py-2.5 w-full justify-center">
-                <span id="rLabel">Run sourced research</span><span class="ic" style="width:28px;height:28px">→</span>
+                <span id="rLabel">Run research</span><span class="ic" style="width:28px;height:28px">→</span>
               </button>
             </div>
             <div id="dossier" class="markdown text-sm leading-relaxed text-ink-soft max-h-[400px] overflow-y-auto pr-2">
-              <span class="text-ink-soft">Click "Run sourced research" to populate a cited dossier.</span>
+              <span class="text-ink-soft">Results appear here after running research.</span>
             </div>
           </div>
         </div>
       </details>
 
-      <!-- AI Assessment (collapsible, runs on demand) -->
+      <!-- AI Assessment (collapsible) -->
       <details class="reveal mt-6" id="aiDetails">
         <summary>
-          <span class="eyebrow" style="margin:0">AI Credit Assessment</span>
+          <span class="eyebrow" style="margin:0">AI Assessment</span>
           <span id="aiStatus" class="text-xs text-ink-soft mono ml-2"></span>
         </summary>
         <div class="inner">
           <div id="aiPlaceholder" class="text-sm text-ink-soft">
-            <p>Runs the autonomous credit agent: verified analysis + live sourced research + recommendation.</p>
-            <p class="mt-1 text-xs">Requires LLM key (Groq or NVIDIA NIM).</p>
+            <p>Runs the full credit agent — analysis, research, and recommendation.</p>
+            <p class="mt-1 text-xs">Requires an LLM key (Groq or NVIDIA NIM).</p>
             <button id="runAI" class="btn btn-amber !py-2.5 mt-3">
-              <span id="aiLabel">Run AI assessment</span><span class="ic" style="width:28px;height:28px">→</span>
+              <span id="aiLabel">Run assessment</span><span class="ic" style="width:28px;height:28px">→</span>
             </button>
           </div>
           <div id="aiOutput" class="markdown text-sm leading-relaxed text-ink-soft max-h-[500px] overflow-y-auto pr-2 hidden"></div>
@@ -235,7 +228,6 @@ details>.inner{padding:0 1.5rem 1.5rem}
         </div>
       </details>
 
-      <!-- Next step -->
       <div class="reveal mt-8 flex justify-end">
         <button class="btn btn-amber" onclick="showStep(3)">
           <span>Export report</span><span class="ic">→</span>
@@ -243,14 +235,12 @@ details>.inner{padding:0 1.5rem 1.5rem}
       </div>
     </section>
 
-    <!-- ============================================================ -->
-    <!-- STEP 3 — EXPORT                                              -->
-    <!-- ============================================================ -->
+    <!-- STEP 3 — EXPORT -->
     <section id="step-export" class="px-5 max-w-4xl mx-auto hidden">
       <div class="reveal">
-        <p class="eyebrow">Export</p>
-        <h2 class="display text-3xl sm:text-4xl font-semibold mt-3">Download your report</h2>
-        <p class="text-ink-soft mt-2 max-w-xl">Set the engagement details and choose a format. ATLAS synthesises the analysis, research and standards into a branded document.</p>
+        <p class="eyebrow">Step 3</p>
+        <h2 class="display text-3xl sm:text-4xl font-semibold mt-3">Export</h2>
+        <p class="text-ink-soft mt-2 max-w-xl">Pick a format and download.</p>
       </div>
 
       <div class="reveal mt-8">
@@ -261,28 +251,27 @@ details>.inner{padding:0 1.5rem 1.5rem}
               <input id="rptAnalyst" class="field mt-1" value="Lawrence Oladeji" />
             </div>
             <div>
-              <label class="text-sm font-medium">Client / company</label>
+              <label class="text-sm font-medium">Company</label>
               <input id="rptCompany" class="field mt-1" />
             </div>
           </div>
           <div>
-            <label class="text-sm font-medium">Engagement question / purpose</label>
-            <textarea id="rptPurpose" rows="2" class="field mt-1" placeholder="Is the client creditworthy for additional facilities?"></textarea>
+            <label class="text-sm font-medium">Purpose</label>
+            <textarea id="rptPurpose" rows="2" class="field mt-1" placeholder="What question does this report answer?"></textarea>
           </div>
 
-          <!-- Format cards -->
           <div class="grid sm:grid-cols-3 gap-3 mt-2">
             <button class="format-card active" data-fmt="pdf">
               <div class="text-lg font-display font-bold">PDF</div>
-              <div class="text-xs text-ink-soft">Branded credit report</div>
+              <div class="text-xs text-ink-soft">Branded report</div>
             </button>
             <button class="format-card" data-fmt="docx">
               <div class="text-lg font-display font-bold">Word</div>
-              <div class="text-xs text-ink-soft">Editable document</div>
+              <div class="text-xs text-ink-soft">Editable doc</div>
             </button>
             <button class="format-card" data-fmt="md">
               <div class="text-lg font-display font-bold">Markdown</div>
-              <div class="text-xs text-ink-soft">Plain text memo</div>
+              <div class="text-xs text-ink-soft">Plain text</div>
             </button>
           </div>
 
@@ -293,16 +282,16 @@ details>.inner{padding:0 1.5rem 1.5rem}
         </div></div>
       </div>
 
-      <!-- AI Memo (alternative export) -->
+      <!-- AI Memo (separate) -->
       <details class="reveal mt-6" id="memoDetails">
         <summary>
-          <span class="eyebrow" style="margin:0">AI Memo (Markdown)</span>
+          <span class="eyebrow" style="margin:0">AI Memo</span>
           <span id="memoStatus" class="text-xs text-ink-soft mono ml-2"></span>
         </summary>
         <div class="inner">
-          <p class="text-sm text-ink-soft mb-3">Runs the full AI agent and downloads the memo as Markdown. Requires LLM key + Vercel Pro.</p>
+          <p class="text-sm text-ink-soft mb-3">Runs the AI agent and returns a Markdown memo. Requires LLM key.</p>
           <button id="runMemo" class="btn btn-amber !py-2.5">
-            <span id="memoLabel">Generate AI memo</span><span class="ic" style="width:28px;height:28px">→</span>
+            <span id="memoLabel">Generate memo</span><span class="ic" style="width:28px;height:28px">→</span>
           </button>
           <p id="memoErr" class="text-xs text-red-700 mt-2 hidden"></p>
           <div id="memoPreview" class="markdown text-sm leading-relaxed text-ink-soft max-h-[500px] overflow-y-auto pr-2 mt-4 hidden"></div>
@@ -325,7 +314,7 @@ details>.inner{padding:0 1.5rem 1.5rem}
   <div class="relative max-w-lg mx-auto mt-24 mx-5">
     <div class="bezel"><div class="core space-y-4">
       <div class="flex items-center justify-between">
-        <p class="eyebrow">Industry Standards</p>
+        <p class="eyebrow">Standards</p>
         <button id="stdClose" class="w-8 h-8 rounded-full hover:bg-ink/5 grid place-items-center text-ink-soft">✕</button>
       </div>
       <input id="stdName" class="field !py-2 font-display font-semibold" value="Default industry standard" />
@@ -338,12 +327,6 @@ details>.inner{padding:0 1.5rem 1.5rem}
     </div></div>
   </div>
 </div>
-
-<style>
-.format-card{padding:1rem;border-radius:1rem;border:1.5px solid rgba(22,19,15,.08);background:#FBF9F4;text-align:center;transition:all .3s ease;cursor:pointer}
-.format-card:hover{border-color:rgba(204,136,0,.3);background:rgba(204,136,0,.04)}
-.format-card.active{border-color:#CC8800;background:rgba(204,136,0,.08);box-shadow:0 0 0 3px rgba(204,136,0,.12)}
-</style>
 
 <script>
 const $=(s,r=document)=>r.querySelector(s);
@@ -360,7 +343,6 @@ window.addEventListener("error",e=>{
 
 let STATE={files:[],result:null,extractedFmt:"pdf"};
 
-// ─── safe fetch ──────────────────────────────────────────────────────────────
 async function apiFetch(url,opts={}){
   const res=await fetch(url,opts);
   const ct=res.headers.get("content-type")||"";
@@ -369,9 +351,7 @@ async function apiFetch(url,opts={}){
 }
 
 // ─── step routing ────────────────────────────────────────────────────────────
-const STEPS=[1,2,3];
 let currentStep=1;
-
 function showStep(n){
   currentStep=n;
   [1,2,3].forEach(s=>{
@@ -382,16 +362,11 @@ function showStep(n){
   window.scrollTo({top:0,behavior:"smooth"});
   observeReveals();
 }
-
 function renderProgress(){
   const bar=$("#progressBar");bar.innerHTML="";
   const labels=["Files","Analysis","Export"];
-  STEPS.forEach((s,i)=>{
-    if(i>0){
-      const ln=document.createElement("div");
-      ln.className="progress-line"+(s<=currentStep?" done":"");
-      bar.appendChild(ln);
-    }
+  [1,2,3].forEach((s,i)=>{
+    if(i>0){const ln=document.createElement("div");ln.className="progress-line"+(s<=currentStep?" done":"");bar.appendChild(ln)}
     const step=document.createElement("div");
     step.className="progress-step"+(s===currentStep?" active":s<currentStep?" done":"");
     step.innerHTML=`<span class="num">${s<currentStep?"✓":s}</span>${labels[i]}`;
@@ -401,7 +376,6 @@ function renderProgress(){
   });
 }
 
-// ─── reveals ─────────────────────────────────────────────────────────────────
 let io;
 function observeReveals(){
   if(io)io.disconnect();
@@ -412,26 +386,27 @@ function observeReveals(){
 }
 observeReveals();
 
-// ─── auto-detect metadata from filename ──────────────────────────────────────
+// ─── auto-detect from filename ───────────────────────────────────────────────
 function autoDetect(name){
   const base=name.replace(/\.[^.]+$/,"");
   let entity="",year=new Date().getFullYear();
-  // patterns: Entity_2023, Entity_FY2023, 2023_Entity, Entity-2023-financials
   const ym=base.match(/(?:FY)?(\d{4})/);
   if(ym)year=parseInt(ym[1]);
-  // entity: everything that isn't the year or common suffixes
   let ent=base.replace(/(?:FY)?\d{4}/g,"").replace(/[_\-]/g," ").replace(/\b(financial|statement|report|consolidated|annual|data)\b/gi,"").trim();
   if(ent.length>2)entity=ent.charAt(0).toUpperCase()+ent.slice(1);
   return{entity,year};
 }
 
-// ─── file handling ───────────────────────────────────────────────────────────
+// ─── files ───────────────────────────────────────────────────────────────────
 const dz=$("#dropzone"),fi=$("#fileInput");
-dz.addEventListener("click",()=>fi.click());
-fi.addEventListener("change",e=>addFiles(e.target.files));
-["dragenter","dragover"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag")}));
-["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag")}));
-dz.addEventListener("drop",e=>addFiles(e.dataTransfer.files));
+fi.addEventListener("change",e=>{addFiles(e.target.files);fi.value=""});
+dz.addEventListener("click",e=>{ if(e.target!==fi) fi.click(); });
+function addDrag(el){
+  ["dragenter","dragover"].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag")}));
+  ["dragleave","drop"].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag")}));
+  el.addEventListener("drop",e=>addFiles(e.dataTransfer.files));
+}
+addDrag(dz);addDrag(fi);
 
 function addFiles(fileList){
   [...fileList].forEach(f=>{
@@ -457,7 +432,7 @@ function renderFiles(){
       <label class="text-xs text-ink-soft">FY
         <input data-k="year" data-i="${i}" type="number" value="${it.year}" class="field !w-20 !py-1 !px-2 mono text-sm" />
       </label>
-      <input data-k="entity" data-i="${i}" value="${it.entity}" placeholder="entity (opt)" class="field !w-40 !py-1 !px-2 text-sm" />
+      <input data-k="entity" data-i="${i}" value="${it.entity}" placeholder="entity" class="field !w-40 !py-1 !px-2 text-sm" />
       <button data-del="${i}" class="w-8 h-8 grid place-items-center rounded-full hover:bg-ink/5 text-ink-soft">✕</button>`;
     wrap.appendChild(chip);
   });
@@ -469,7 +444,7 @@ function renderFiles(){
   }));
   const has=STATE.files.length>0;
   $("#analyzeBtn").disabled=!has;
-  $("#ingestHint").textContent=has?`${STATE.files.length} file(s) ready · auto-detected years & entities shown above.`:"Add at least one file to begin.";
+  $("#ingestHint").textContent=has?`${STATE.files.length} file(s) ready`:"Add at least one file to begin.";
 }
 
 // ─── analyze ─────────────────────────────────────────────────────────────────
@@ -495,15 +470,10 @@ $("#analyzeBtn").addEventListener("click",async()=>{
 // ─── render analysis ─────────────────────────────────────────────────────────
 function renderAnalysis(){
   const r=STATE.result;if(!r)return;
-
-  // Header
   $("#analysisTitle").textContent=r.entity_name||"Financial Analysis";
   $("#analysisMeta").textContent=`${r.currency||"currency n/a"} · fiscal years: ${(r.matrix?.years||[]).join(", ")}`;
-
-  // Company name for export
   $("#rptCompany").value=r.entity_name||"";
 
-  // ── Compliance ──
   const sa=r.standards_assessment;
   if(sa){
     const pct=Math.round((sa.compliance_score||0)*100);
@@ -524,10 +494,9 @@ function renderAnalysis(){
         <span class="mono text-ink-soft text-xs">${v} ${e.operator} ${e.threshold}</span>`;
       wrap.appendChild(row);
     });
-    $("#compBreach").textContent=sa.breaches?.length?"Breaches: "+sa.breaches.join(", "):"Meets industry standard ✓";
+    $("#compBreach").textContent=sa.breaches?.length?"Breaches: "+sa.breaches.join(", "):"All ratios within thresholds.";
   }
 
-  // ── Flags ──
   const flags=r.flags||[];
   if(flags.length){
     $("#flagsCard").classList.remove("hidden");
@@ -541,7 +510,6 @@ function renderAnalysis(){
     });
   }
 
-  // ── Matrix ──
   const m=r.matrix;
   if(m){
     const years=m.years;
@@ -557,15 +525,14 @@ function renderAnalysis(){
       html+=`</tr>`;
     });
     html+=`</tbody></table>`;
-    html+=`<p class="text-xs text-ink-soft mt-3 px-1">Values in thousands of the reporting currency unless stated. Missing cells indicate undisclosed or unparsed line items.</p>`;
+    html+=`<p class="text-xs text-ink-soft mt-3 px-1">Values in thousands. Blank cells = not disclosed or not parsed.</p>`;
     $("#matrixWrap").innerHTML=html;
   }
 
-  // Pre-fill research sector from entity name
   $("#rSector").value=r.entity_name||"";
 }
 
-// ─── CSV / JSON download ─────────────────────────────────────────────────────
+// ─── CSV / JSON ──────────────────────────────────────────────────────────────
 function downloadBlob(name,content,type){
   const blob=new Blob([content],{type});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);
@@ -596,13 +563,13 @@ $("#runResearch").addEventListener("click",async()=>{
     $("#dossier").innerHTML=MD(d.dossier_markdown||"");
     $("#researchStatus").textContent="done · "+(d.report?.sources?.length||0)+" sources";
   }catch(e){$("#dossier").textContent="Error: "+e.message}
-  finally{btn.disabled=false;$("#rLabel").previousSibling?.remove?.();$("#rLabel").textContent="Run sourced research"}
+  finally{btn.disabled=false;$("#rLabel").previousSibling?.remove?.();$("#rLabel").textContent="Run research"}
 });
 
 // ─── AI assessment ───────────────────────────────────────────────────────────
 $("#runAI").addEventListener("click",async()=>{
   const btn=$("#runAI");btn.disabled=true;
-  $("#aiLabel").textContent="Running agent…";$("#aiLabel").insertAdjacentHTML("beforebegin",`<span class="spinner"></span>`);
+  $("#aiLabel").textContent="Running…";$("#aiLabel").insertAdjacentHTML("beforebegin",`<span class="spinner"></span>`);
   const ctrl=new AbortController();
   const timer=setTimeout(()=>ctrl.abort(),90000);
   try{
@@ -615,9 +582,9 @@ $("#runAI").addEventListener("click",async()=>{
     $("#aiPlaceholder").classList.add("hidden");
     $("#aiStatus").textContent="done";
   }catch(e){
-    const msg=e.name==="AbortError"?"Timed out after 90s — needs Vercel Pro.":"Error: "+e.message;
+    const msg=e.name==="AbortError"?"Timed out after 90s.":"Error: "+e.message;
     $("#aiErr").textContent=msg;$("#aiErr").classList.remove("hidden");
-  }finally{clearTimeout(timer);btn.disabled=false;$("#aiLabel").previousSibling?.remove?.();$("#aiLabel").textContent="Run AI assessment"}
+  }finally{clearTimeout(timer);btn.disabled=false;$("#aiLabel").previousSibling?.remove?.();$("#aiLabel").textContent="Run assessment"}
 });
 
 // ─── format selector ─────────────────────────────────────────────────────────
@@ -638,24 +605,17 @@ $("#dlReport").addEventListener("click",async()=>{
   $("#dlLabel").textContent="Generating…";$("#dlLabel").insertAdjacentHTML("beforebegin",`<span class="spinner"></span>`);
   $("#dlErr").classList.add("hidden");
   try{
+    const body={
+      analyst_name:$("#rptAnalyst").value,
+      company_name:$("#rptCompany").value||STATE.result?.entity_name||"Client",
+      purpose:$("#rptPurpose").value||null,
+      periods:STATE.result?.periods||null,
+    };
     if(fmt==="md"){
-      // Generate markdown client-side from the report endpoint
-      const body={
-        analyst_name:$("#rptAnalyst").value,
-        company_name:$("#rptCompany").value||STATE.result?.entity_name||"Client",
-        purpose:$("#rptPurpose").value||null,
-        periods:STATE.result?.periods||null,
-      };
       const d=await apiFetch("/api/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
       if(d.error){$("#dlErr").textContent=d.error;$("#dlErr").classList.remove("hidden");return}
       downloadBlob("credit_assessment.md",d.html||"","text/markdown");
     }else{
-      const body={
-        analyst_name:$("#rptAnalyst").value,
-        company_name:$("#rptCompany").value||STATE.result?.entity_name||"Client",
-        purpose:$("#rptPurpose").value||null,
-        periods:STATE.result?.periods||null,
-      };
       const r=await fetch("/api/report/download?format="+fmt,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
       if(!r.ok){
         const ct=r.headers.get("content-type")||"";
@@ -671,11 +631,11 @@ $("#dlReport").addEventListener("click",async()=>{
   finally{btn.disabled=false;$("#dlLabel").previousSibling?.remove?.();const labels={pdf:"Download PDF",docx:"Download Word",md:"Download Markdown"};$("#dlLabel").textContent=labels[fmt]||"Download"}
 });
 
-// ─── AI memo (separate from report) ─────────────────────────────────────────
+// ─── AI memo ─────────────────────────────────────────────────────────────────
 let MEMO_MD="";
 $("#runMemo").addEventListener("click",async()=>{
   const btn=$("#runMemo");btn.disabled=true;
-  $("#memoLabel").textContent="Running agent…";
+  $("#memoLabel").textContent="Running…";
   const ctrl=new AbortController();
   const timer=setTimeout(()=>ctrl.abort(),90000);
   try{
@@ -689,9 +649,9 @@ $("#runMemo").addEventListener("click",async()=>{
     $("#memoPreview").classList.remove("hidden");
     $("#memoStatus").textContent="done";
   }catch(e){
-    const msg=e.name==="AbortError"?"Timed out — needs Vercel Pro.":"Error: "+e.message;
+    const msg=e.name==="AbortError"?"Timed out.":"Error: "+e.message;
     $("#memoErr").textContent=msg;$("#memoErr").classList.remove("hidden");
-  }finally{clearTimeout(timer);btn.disabled=false;$("#memoLabel").textContent="Generate AI memo"}
+  }finally{clearTimeout(timer);btn.disabled=false;$("#memoLabel").textContent="Generate memo"}
 });
 
 // ─── standards modal ─────────────────────────────────────────────────────────
@@ -732,7 +692,6 @@ $("#saveStd").addEventListener("click",async()=>{
   }catch(e){$("#stdStatus").textContent="Save failed: "+e.message}
 });
 
-// ─── init ────────────────────────────────────────────────────────────────────
 showStep(1);
 </script>
 </body>

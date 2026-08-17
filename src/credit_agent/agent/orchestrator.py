@@ -142,10 +142,12 @@ class CreditAgent:
         return (resp.choices[0].message.content or "").strip()
 
     def _dispatch(self, name: str, args: dict, path: str) -> dict:
+        # The model is told the workbook path in context; never trust a path it
+        # echoes back (some providers return malformed/garbled tool arguments).
         if name == "run_credit_analysis":
-            return analysis_bundle(args.get("path", path))
+            return analysis_bundle(path)
         if name == "get_stress_scenarios":
-            return stress_bundle(args.get("path", path))
+            return stress_bundle(path)
         if name == "conduct_industry_research":
             return self._research(args.get("client_name", ""), args.get("sector"))
         if name == "submit_assessment":
@@ -202,7 +204,14 @@ class CreditAgent:
                 "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
             })
             for tc in msg.tool_calls:
-                args = json.loads(tc.function.arguments)
+                try:
+                    args = json.loads(tc.function.arguments)
+                except (json.JSONDecodeError, ValueError):
+                    messages.append({
+                        "role": "tool", "tool_call_id": tc.id,
+                        "content": json.dumps({"error": "Tool arguments were not valid JSON; please retry the call."}),
+                    })
+                    continue
                 result = self._dispatch(tc.function.name, args, path)
                 if tc.function.name == "submit_assessment":
                     return {"assessment": result, "messages": messages}

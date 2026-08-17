@@ -21,7 +21,9 @@ SC = "data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx"
 
 def test_sc_ingest_two_years():
     res = ingest([{"path": SC, "year": 2023, "entity": "GS"}])
-    assert res.entity_name == "GS"
+    # For a Standard Chartered workbook the entity is known from the file itself;
+    # the workbook name is authoritative (the SPA company field can still override at report time).
+    assert res.entity_name == "Green Solutions Manufacturing Ltd"
     assert [p.period for p in res.periods] == ["2022", "2023"]
     assert res.currency == "USD (thousands)"
     assert res.flags[0].level == "info"
