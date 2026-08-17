@@ -400,6 +400,7 @@ function autoDetect(name){
 // ─── files ───────────────────────────────────────────────────────────────────
 const dz=$("#dropzone"),fi=$("#fileInput");
 fi.addEventListener("change",e=>{addFiles(e.target.files);fi.value=""});
+dz.addEventListener("click",e=>{ if(e.target!==fi) fi.click(); });
 function addDrag(el){
   ["dragenter","dragover"].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag")}));
   ["dragleave","drop"].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag")}));
