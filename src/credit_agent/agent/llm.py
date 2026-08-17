@@ -20,7 +20,10 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-from openai import OpenAI
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None  # type: ignore[assignment,misc]
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
