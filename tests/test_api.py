@@ -9,11 +9,11 @@ from fastapi.testclient import TestClient
 from credit_agent.api.app import app
 
 
-def test_index_has_all_views():
+def test_index_has_all_steps():
     c = TestClient(app)
     html = c.get("/").text
-    for view in ("ingest", "extract", "research", "standards", "report", "memo"):
-        assert f'data-view="{view}"' in html
+    for step in ("step-files", "step-analysis", "step-export"):
+        assert f'id="{step}"' in html
 
 
 def test_agent_requires_llm_key():
