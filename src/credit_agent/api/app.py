@@ -32,6 +32,7 @@ from ..spreading.loader import load_sc_workbook
 
 ROOT = Path(os.getcwd()).resolve()
 PUBLIC = ROOT / "public"
+_APP_HTML = Path(__file__).resolve().parent / "static" / "app.html"
 # Serverless filesystems (e.g. Vercel) are read-only outside /tmp, so uploads
 # always land in the temp dir — valid for both local dev and serverless.
 UPLOAD_DIR = Path(tempfile.gettempdir()) / "credit_agent_uploads"
@@ -43,8 +44,7 @@ app = FastAPI(title="Credit Analyst Agent", version="0.3.0")
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
-    for name in ("app.html", "index.html"):
-        p = PUBLIC / name
+    for p in (_APP_HTML, PUBLIC / "app.html", PUBLIC / "index.html"):
         if p.exists():
             html = p.read_text(encoding="utf-8")
             return HTMLResponse(html, headers={"Cache-Control": "no-store"})
