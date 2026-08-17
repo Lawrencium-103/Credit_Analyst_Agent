@@ -17,7 +17,7 @@ from ..schema.financials import (
     IncomeStatement,
     PeriodFinancials,
 )
-from .generic_xlsx import parse_generic_xlsx
+from .generic_xlsx import parse_generic_xlsx_multi
 from .pdf import parse_pdf
 from ..spreading.loader import load_sc_workbook
 
@@ -63,22 +63,26 @@ def ingest_file(path: str, year: int, entity: str | None = None) -> tuple[list[P
                 cf.entity_name = entity
             periods = cf.periods
             flags.append(IngestionFlag(level="info", message=f"Loaded Standard Chartered format ({len(periods)} periods)."))
+            periods = _reyear(periods, year)
         else:
-            periods = [parse_generic_xlsx(path, str(year), entity)]
+            periods = parse_generic_xlsx_multi(path, str(year), entity)
+            n = len(periods)
             flags.append(IngestionFlag(
                 level="warning",
-                message="Non-Standard-Chartered workbook — partial keyword extraction, human review required.",
+                message=f"Non-Standard-Chartered workbook ({n} period{'s' if n > 1 else ''}) — keyword extraction, human review required.",
             ))
+            # generic parser already assigns correct year labels — no reyear
     elif ext == "pdf":
         periods = [parse_pdf(path, str(year), entity)]
         flags.append(IngestionFlag(
             level="warning",
             message="PDF draft — heuristic extraction only, human review required before reliance.",
         ))
+        periods = _reyear(periods, year)
     else:
         raise ValueError(f"Unsupported file type: .{ext}")
 
-    return _reyear(periods, year), flags
+    return periods, flags
 
 
 def ingest(items: list[dict]) -> IngestionResult:
@@ -107,12 +111,136 @@ def ingest(items: list[dict]) -> IngestionResult:
             pass
 
     periods = [by_year[y] for y in sorted(by_year, key=lambda x: int(x))]
+
+    # Data quality flags
+    all_flags.extend(_quality_flags(periods))
+
     return IngestionResult(
         entity_name=entity_name,
         currency=currency,
         periods=periods,
         flags=all_flags,
     )
+
+
+# ── Data quality analysis ───────────────────────────────────────────────────
+
+# Fields that are most important for credit analysis
+_CRITICAL_FIELDS = [
+    ("revenue", "income_statement", "Revenue"),
+    ("net_income", "income_statement", "Net Income"),
+    ("total_assets", "balance_sheet", "Total Assets"),
+    ("total_equity", "balance_sheet", "Total Equity"),
+    ("total_debt", "balance_sheet", "Total Debt"),
+    ("operating_cash_flow", "cash_flow", "Operating Cash Flow"),
+]
+
+_IMPORTANT_FIELDS = [
+    ("cogs", "income_statement", "Cost of Sales"),
+    ("gross_profit", "income_statement", "Gross Profit"),
+    ("ebitda", "income_statement", "EBITDA"),
+    ("interest_expense", "income_statement", "Interest Expense"),
+    ("cash_and_equivalents", "balance_sheet", "Cash & Equivalents"),
+    ("current_assets", "balance_sheet", "Current Assets"),
+    ("current_liabilities", "balance_sheet", "Current Liabilities"),
+    ("accounts_receivable", "balance_sheet", "Accounts Receivable"),
+    ("inventory", "balance_sheet", "Inventory"),
+]
+
+
+def _count_populated(periods: list[PeriodFinancials]) -> dict[str, int]:
+    """Count how many periods have each field populated."""
+    counts: dict[str, int] = {}
+    for field_name, stmt_name, _ in _CRITICAL_FIELDS + _IMPORTANT_FIELDS:
+        n = 0
+        for p in periods:
+            sub = getattr(p, stmt_name)
+            if getattr(sub, field_name, None) is not None:
+                n += 1
+        counts[field_name] = n
+    return counts
+
+
+def _quality_flags(periods: list[PeriodFinancials]) -> list[IngestionFlag]:
+    """Analyse extraction results and produce data quality flags."""
+    flags: list[IngestionFlag] = []
+    if not periods:
+        flags.append(IngestionFlag(level="warning", message="No periods extracted."))
+        return flags
+
+    n = len(periods)
+
+    # ── Missing critical fields ─────────────────────────────────────
+    counts = _count_populated(periods)
+    missing_critical = [
+        label for field, _, label in _CRITICAL_FIELDS
+        if counts.get(field, 0) == 0
+    ]
+    if missing_critical:
+        flags.append(IngestionFlag(
+            level="warning",
+            message=f"Missing critical fields across all periods: {', '.join(missing_critical)}.",
+        ))
+
+    missing_important = [
+        label for field, _, label in _IMPORTANT_FIELDS
+        if counts.get(field, 0) == 0
+    ]
+    if missing_important:
+        flags.append(IngestionFlag(
+            level="warning",
+            message=f"Missing important fields: {', '.join(missing_important)}.",
+        ))
+
+    # ── Partial coverage per period ─────────────────────────────────
+    all_fields = _CRITICAL_FIELDS + _IMPORTANT_FIELDS
+    for p in periods:
+        filled = 0
+        for field_name, stmt_name, _ in all_fields:
+            sub = getattr(p, stmt_name)
+            if getattr(sub, field_name, None) is not None:
+                filled += 1
+        pct = filled / len(all_fields)
+        if pct < 0.3:
+            flags.append(IngestionFlag(
+                level="warning",
+                message=f"Period {p.period}: only {filled}/{len(all_fields)} fields extracted — may be incomplete.",
+            ))
+
+    # ── Period-to-period consistency ────────────────────────────────
+    if n >= 2:
+        for field_name, stmt_name, label in _CRITICAL_FIELDS:
+            vals = []
+            for p in periods:
+                sub = getattr(p, stmt_name)
+                v = getattr(sub, field_name, None)
+                if v is not None:
+                    vals.append((p.period, v))
+            if len(vals) >= 2:
+                prev_label, prev_val = vals[0]
+                for cur_label, cur_val in vals[1:]:
+                    if prev_val != 0:
+                        change = abs((cur_val - prev_val) / prev_val)
+                        if change > 5.0:
+                            flags.append(IngestionFlag(
+                                level="warning",
+                                message=(
+                                    f"{label} changed {change:.0%} from {prev_label} "
+                                    f"({prev_val:,.0f}) to {cur_label} ({cur_val:,.0f}) — verify data."
+                                ),
+                            ))
+                    prev_label, prev_label = cur_label, cur_label
+                    prev_val = cur_val
+
+    # ── Negative equity warning ─────────────────────────────────────
+    for p in periods:
+        if p.balance_sheet.total_equity is not None and p.balance_sheet.total_equity < 0:
+            flags.append(IngestionFlag(
+                level="warning",
+                message=f"Period {p.period}: negative total equity ({p.balance_sheet.total_equity:,.0f}) — ratio analysis may be unreliable.",
+            ))
+
+    return flags
 
 
 _MATRIX: list[tuple[str, str, str, str]] = [

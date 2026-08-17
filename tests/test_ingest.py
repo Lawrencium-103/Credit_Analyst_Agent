@@ -56,8 +56,10 @@ def test_generic_xlsx_fallback(tmp_path):
     ws.append(["Total Equity", 3000, 3200])
     wb.save(path)
     periods, flags = ingest_file(str(path), 2022)
-    assert periods[0].period == "2022"
+    # Multi-period generic: two data columns → two periods
+    assert len(periods) == 2
     assert periods[0].income_statement.revenue == 1000
+    assert periods[1].income_statement.revenue == 1200
     assert periods[0].balance_sheet.total_assets == 5000
     assert flags[0].level == "warning"
 

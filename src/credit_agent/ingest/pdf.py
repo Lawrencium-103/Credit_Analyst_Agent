@@ -16,6 +16,7 @@ import fitz
 
 from ..schema.financials import BalanceSheet, CashFlow, IncomeStatement, PeriodFinancials
 from .pdf_to_md import extract_line_items_from_table, find_financial_table, pdf_to_markdown
+from .number_parser import parse_number
 
 _NUMBER_RE = re.compile(
     r"\(?-?\$?\s*[\d,]+(?:\.\d+)?\)?|\(?-?\$?\s*\d{1,3}(?:,\d{3})+(?:\.\d+)?\)?",
@@ -52,17 +53,7 @@ _LABEL_MAP = [
 
 
 def _clean_number(raw: str) -> float | None:
-    if not raw:
-        return None
-    neg = raw.strip().startswith("(") or raw.strip().startswith("-")
-    digits = re.sub(r"[^\d.]", "", raw)
-    try:
-        val = float(digits)
-    except ValueError:
-        return None
-    if raw.strip().endswith(")") and not raw.strip().startswith("("):
-        neg = True
-    return -val if neg else val
+    return parse_number(raw)
 
 
 def _first_number_after(text: str, pos: int) -> float | None:
