@@ -352,3 +352,194 @@ class TestMessyIngestIntegration:
         assert res.entity_name == "GS"
         assert [p.period for p in res.periods] == ["2022", "2023"]
         assert res.currency == "USD (thousands)"
+
+
+# ── Merged cell handling ─────────────────────────────────────────────────────
+
+class TestMergedCells:
+    def test_merged_label_is_read(self, tmp_path):
+        from credit_agent.ingest.generic_xlsx import parse_generic_xlsx_multi
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws.merge_cells("A1:A3")
+        ws["A1"] = "Revenue"
+        ws["B1"] = 100
+        ws["B2"] = 200
+        ws["B3"] = 300
+        ws["A4"] = "COGS"
+        ws["B4"] = 50
+        ws["A5"] = "Net Income"
+        ws["B5"] = 30
+
+        path = tmp_path / "merged.xlsx"
+        wb.save(str(path))
+        periods = parse_generic_xlsx_multi(str(path), "2023")
+        assert len(periods) == 1
+        assert periods[0].income_statement.revenue == 100.0
+
+    def test_merged_period_header(self, tmp_path):
+        from credit_agent.ingest.generic_xlsx import parse_generic_xlsx_multi
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        # Merge cells in row 1 for a year header spanning 2 cols
+        ws.merge_cells("B1:C1")
+        ws["A1"] = ""
+        ws["B1"] = "2023"
+        ws["A2"] = "Revenue"
+        ws["B2"] = 100
+        ws["A3"] = "COGS"
+        ws["B3"] = 50
+
+        path = tmp_path / "merged_header.xlsx"
+        wb.save(str(path))
+        periods = parse_generic_xlsx_multi(str(path), "2023")
+        assert len(periods) >= 1
+        assert periods[0].income_statement.revenue == 100.0
+
+
+# ── Hidden rows/columns ─────────────────────────────────────────────────────
+
+class TestHiddenRowsCols:
+    def test_hidden_row_is_skipped(self, tmp_path):
+        from credit_agent.ingest.generic_xlsx import parse_generic_xlsx_multi
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "Revenue"
+        ws["B1"] = 100
+        ws["A2"] = "COGS"
+        ws["B2"] = 50
+        ws.row_dimensions[2].hidden = True  # hide COGS row
+
+        path = tmp_path / "hidden.xlsx"
+        wb.save(str(path))
+        periods = parse_generic_xlsx_multi(str(path), "2023")
+        assert periods[0].income_statement.revenue == 100.0
+        assert periods[0].income_statement.cogs is None
+
+    def test_hidden_col_is_skipped(self, tmp_path):
+        from credit_agent.ingest.generic_xlsx import parse_generic_xlsx_multi
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "Revenue"
+        ws["B1"] = 100
+        ws["C1"] = 200
+        ws.column_dimensions["C"].hidden = True  # hide col C
+
+        path = tmp_path / "hidden_col.xlsx"
+        wb.save(str(path))
+        periods = parse_generic_xlsx_multi(str(path), "2023")
+        assert len(periods) == 1
+        # Only one data column visible (col B), so only one period
+        assert periods[0].income_statement.revenue == 100.0
+
+
+# ── Vertical layout ─────────────────────────────────────────────────────────
+
+class TestVerticalLayout:
+    def test_vertical_years_as_rows(self, tmp_path):
+        from credit_agent.ingest.generic_xlsx import parse_generic_xlsx_multi
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        # Vertical layout: labels in row 1, years as rows
+        ws["A1"] = ""
+        ws["B1"] = "Revenue"
+        ws["C1"] = "COGS"
+        ws["A2"] = "2022"
+        ws["B2"] = 1000
+        ws["C2"] = 400
+        ws["A3"] = "2023"
+        ws["B3"] = 1200
+        ws["C3"] = 500
+
+        path = tmp_path / "vertical.xlsx"
+        wb.save(str(path))
+        periods = parse_generic_xlsx_multi(str(path), "2023")
+        assert len(periods) == 2
+        by_yr = {p.period: p for p in periods}
+        assert by_yr["2022"].income_statement.revenue == 1000.0
+        assert by_yr["2023"].income_statement.revenue == 1200.0
+        assert by_yr["2022"].income_statement.cogs == 400.0
+        assert by_yr["2023"].income_statement.cogs == 500.0
+
+
+# ── Multi-sheet detection ───────────────────────────────────────────────────
+
+class TestMultiSheetDetection:
+    def test_classify_sheet_names(self):
+        from credit_agent.ingest.generic_xlsx import _classify_sheet
+        assert _classify_sheet("Income Statement") == "income_statement"
+        assert _classify_sheet("Balance Sheet") == "balance_sheet"
+        assert _classify_sheet("Cash Flow") == "cash_flow"
+        assert _classify_sheet("P&L") == "income_statement"
+        assert _classify_sheet("Profit & Loss") == "income_statement"
+        assert _classify_sheet("Statement of Financial Position") == "balance_sheet"
+        assert _classify_sheet("Cashflows") == "cash_flow"
+        assert _classify_sheet("Random Data") is None
+
+    def test_describe_workbook(self):
+        from credit_agent.ingest.generic_xlsx import describe_workbook
+        SC = "data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx"
+        info = describe_workbook(SC)
+        assert "sheet_names" in info
+        assert len(info["sheet_names"]) > 0
+        # Our SC workbook has known sheets
+        types = info["sheet_types"]
+        assert any(v == "income_statement" for v in types.values()), (
+            f"Expected IS in types, got {types}"
+        )
+        assert any(v == "balance_sheet" for v in types.values()), (
+            f"Expected BS in types, got {types}"
+        )
+        assert any(v == "cash_flow" for v in types.values()), (
+            f"Expected CF in types, got {types}"
+        )
+
+    def test_multi_sheet_xlsx_combines_data(self, tmp_path):
+        from credit_agent.ingest.generic_xlsx import parse_generic_xlsx_multi
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        # Sheet 1: Income Statement
+        ws_is = wb.active
+        ws_is.title = "Income Statement"
+        ws_is["A1"] = "Revenue"
+        ws_is["B1"] = 1000
+        ws_is["A2"] = "COGS"
+        ws_is["B2"] = 400
+        ws_is["A3"] = "Net Income"
+        ws_is["B3"] = 200
+
+        # Sheet 2: Balance Sheet
+        ws_bs = wb.create_sheet("Balance Sheet")
+        ws_bs["A1"] = "Cash"
+        ws_bs["B1"] = 150
+        ws_bs["A2"] = "Total Assets"
+        ws_bs["B2"] = 3000
+        ws_bs["A3"] = "Total Equity"
+        ws_bs["B3"] = 1800
+
+        # Sheet 3: Cash Flow
+        ws_cf = wb.create_sheet("Cash Flow")
+        ws_cf["A1"] = "Operating Cash Flow"
+        ws_cf["B1"] = 350
+
+        path = tmp_path / "multi_sheet.xlsx"
+        wb.save(str(path))
+        periods = parse_generic_xlsx_multi(str(path), "2023")
+        assert len(periods) == 1
+        p = periods[0]
+        assert p.income_statement.revenue == 1000.0
+        assert p.income_statement.cogs == 400.0
+        assert p.balance_sheet.total_assets == 3000.0
+        assert p.balance_sheet.total_equity == 1800.0
+        assert p.cash_flow.operating_cash_flow == 350.0
