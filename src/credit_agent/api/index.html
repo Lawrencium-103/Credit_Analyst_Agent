@@ -728,7 +728,7 @@ $("#saveStd").addEventListener("click",async()=>{
   try{
     await apiFetch("/api/standards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(STD_CACHE)});
     $("#stdStatus").textContent="Saved ✓";
-    setTimeout((){$("#stdModal").classList.add("hidden")},600);
+    setTimeout(()=>{$("#stdModal").classList.add("hidden")},600);
   }catch(e){$("#stdStatus").textContent="Save failed: "+e.message}
 });
 
