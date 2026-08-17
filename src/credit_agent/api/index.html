@@ -347,7 +347,7 @@ details>.inner{padding:0 1.5rem 1.5rem}
 
 <script>
 const $=(s,r=document)=>r.querySelector(s);
-const $$=(s,r)=>[...r.querySelectorAll(s)];
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const fmt=n=>(n==null||isNaN(n))?null:Number(n);
 const show=v=>fmt(v)==null?"—":Number(v).toLocaleString("en-US",{maximumFractionDigits:1});
 const MD=s=>(window.marked&&window.marked.parse)?window.marked.parse(s||""):(s||"");
