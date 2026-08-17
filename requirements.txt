@@ -12,3 +12,6 @@ python-docx
 httpx
 tavily-python
 python-multipart
+openai
+PyMuPDF
+pymupdf4llm

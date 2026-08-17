@@ -2,9 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": null,
   "outputDirectory": null,
-  "routes": [
-    { "src": "^/$", "dest": "vercel_app.py" }
-  ],
   "env": {
     "PYTHONPATH": "src"
   },
