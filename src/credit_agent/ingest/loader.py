@@ -18,7 +18,7 @@ from ..schema.financials import (
     PeriodFinancials,
 )
 from .generic_xlsx import parse_generic_xlsx_multi
-from .pdf import parse_pdf
+from .pdf import parse_pdf_with_confidence
 from ..spreading.loader import load_sc_workbook
 
 SC_SHEETS = {"I. Profit_Loss", "I. Balance_Sheet", "I. Cashflow"}
@@ -34,6 +34,8 @@ class IngestionResult(BaseModel):
     currency: str | None = None
     periods: list[PeriodFinancials] = Field(default_factory=list)
     flags: list[IngestionFlag] = Field(default_factory=list)
+    extraction_confidence: float | None = None  # 0.0–1.0, None for xlsx
+    extraction_meta: dict = Field(default_factory=dict)
 
 
 def _is_sc(path: str) -> bool:
@@ -53,9 +55,11 @@ def _reyear(periods: list[PeriodFinancials], base_year: int) -> list[PeriodFinan
     return periods
 
 
-def ingest_file(path: str, year: int, entity: str | None = None) -> tuple[list[PeriodFinancials], list[IngestionFlag]]:
+def ingest_file(path: str, year: int, entity: str | None = None) -> tuple[list[PeriodFinancials], list[IngestionFlag], float | None, dict]:
     flags: list[IngestionFlag] = []
     ext = path.lower().rsplit(".", 1)[-1]
+    confidence: float | None = None
+    meta: dict = {}
     if ext in ("xlsx", "xlsm", "xls"):
         if _is_sc(path):
             cf = load_sc_workbook(path)
@@ -71,18 +75,25 @@ def ingest_file(path: str, year: int, entity: str | None = None) -> tuple[list[P
                 level="warning",
                 message=f"Non-Standard-Chartered workbook ({n} period{'s' if n > 1 else ''}) — keyword extraction, human review required.",
             ))
-            # generic parser already assigns correct year labels — no reyear
     elif ext == "pdf":
-        periods = [parse_pdf(path, str(year), entity)]
+        period, confidence, meta = parse_pdf_with_confidence(path, str(year), entity)
+        periods = [period]
+        label = meta.get("confidence_label", "low")
+        method = meta.get("extraction_method", "unknown")
+        pages = meta.get("pages_with_data", 0)
+        total = meta.get("total_pages", 0)
         flags.append(IngestionFlag(
-            level="warning",
-            message="PDF draft — heuristic extraction only, human review required before reliance.",
+            level="warning" if label != "high" else "info",
+            message=(
+                f"PDF extraction ({label} confidence, {method} method, "
+                f"{pages}/{total} pages yielded data) — human review required."
+            ),
         ))
         periods = _reyear(periods, year)
     else:
         raise ValueError(f"Unsupported file type: .{ext}")
 
-    return periods, flags
+    return periods, flags, confidence, meta
 
 
 def ingest(items: list[dict]) -> IngestionResult:
@@ -91,14 +102,23 @@ def ingest(items: list[dict]) -> IngestionResult:
     all_flags: list[IngestionFlag] = []
     entity_name = "Unknown entity"
     currency: str | None = None
+    overall_confidence: float | None = None
+    all_meta: dict = {}
 
     for it in items:
-        periods, flags = ingest_file(it["path"], int(it["year"]), it.get("entity"))
+        periods, flags, confidence, meta = ingest_file(it["path"], int(it["year"]), it.get("entity"))
         all_flags.extend(flags)
         for p in periods:
             by_year[p.period] = p
         if it.get("entity"):
             entity_name = it["entity"]
+        # Track confidence from PDF extractions
+        if confidence is not None:
+            if overall_confidence is None:
+                overall_confidence = confidence
+            else:
+                overall_confidence = min(overall_confidence, confidence)
+            all_meta[it["path"]] = meta
         # capture entity/currency from an SC workbook if present
         try:
             if _is_sc(it["path"]):
@@ -120,6 +140,8 @@ def ingest(items: list[dict]) -> IngestionResult:
         currency=currency,
         periods=periods,
         flags=all_flags,
+        extraction_confidence=overall_confidence,
+        extraction_meta=all_meta,
     )
 
 
