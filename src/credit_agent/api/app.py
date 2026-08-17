@@ -43,8 +43,12 @@ app = FastAPI(title="Credit Analyst Agent", version="0.3.0")
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
-    html = (PUBLIC / "index.html").read_text(encoding="utf-8")
-    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+    for name in ("app.html", "index.html"):
+        p = PUBLIC / name
+        if p.exists():
+            html = p.read_text(encoding="utf-8")
+            return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+    return HTMLResponse("<h1>Not found</h1>", status_code=404)
 
 
 @app.get("/marked.min.js")
