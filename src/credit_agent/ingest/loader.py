@@ -20,8 +20,9 @@ from ..schema.financials import (
     PeriodFinancials,
 )
 from .generic_xlsx import parse_generic_xlsx_multi
-from .pdf import parse_pdf_document
+from .pdf import _match_label, parse_markdown_document, parse_pdf_document
 from ..spreading.loader import load_sc_workbook
+from pathlib import Path
 
 SC_SHEETS = {"I. Profit_Loss", "I. Balance_Sheet", "I. Cashflow"}
 
@@ -57,6 +58,75 @@ def _reyear(periods: list[PeriodFinancials], base_year: int) -> list[PeriodFinan
     return periods
 
 
+def _period_from_flat(obj: dict) -> PeriodFinancials:
+    """Build a single PeriodFinancials from a flat {label: value} mapping.
+
+    Uses the same label matcher as the PDF/Markdown pipelines so keys like
+    "Net Revenue" or "Total Borrowings" land in the right schema field.
+    """
+    inc, bal, cf = {}, {}, {}
+    for k, v in obj.items():
+        if v is None:
+            continue
+        field = _match_label(str(k).lower())
+        if not field:
+            continue
+        if field in IncomeStatement.model_fields:
+            inc[field] = v
+        elif field in BalanceSheet.model_fields:
+            bal[field] = v
+        elif field in CashFlow.model_fields:
+            cf[field] = v
+    return PeriodFinancials(
+        period=str(obj.get("period") or obj.get("year") or "2023"),
+        income_statement=IncomeStatement(**inc),
+        balance_sheet=BalanceSheet(**bal),
+        cash_flow=CashFlow(**cf),
+    )
+
+
+def parse_json_document(text: str, fallback_year: str = "2023") -> tuple[list[PeriodFinancials], float, dict]:
+    """Parse an already-structured JSON document into periods.
+
+    Accepts: a list of period objects, ``{"periods": [...]}``, or a single flat
+    object mapping line-item labels to values. Returns the same
+    ``(periods, confidence, meta)`` shape as the other parsers.
+    """
+    import json as _json
+
+    data = _json.loads(text)
+    if isinstance(data, dict) and "periods" in data and isinstance(data["periods"], list):
+        items = data["periods"]
+    elif isinstance(data, list):
+        items = data
+    else:
+        items = [data]
+
+    periods = []
+    for it in items:
+        if isinstance(it, dict):
+            periods.append(_period_from_flat(it))
+    if not periods:
+        raise ValueError("JSON contained no parseable period objects.")
+
+    filled = sum(
+        1 for p in periods
+        for stmt in (p.income_statement, p.balance_sheet, p.cash_flow)
+        for f in type(stmt).model_fields
+        if getattr(stmt, f) is not None
+    )
+    total = sum(len(stmt.model_fields) for stmt in (IncomeStatement, BalanceSheet, CashFlow))
+    confidence = round(min(filled / max(total, 1), 1.0), 3)
+    meta = {
+        "extraction_method": "json",
+        "confidence": confidence,
+        "confidence_label": "high" if confidence >= 0.7 else ("medium" if confidence >= 0.4 else "low"),
+        "years": [p.period for p in periods],
+        "review_required": False,
+    }
+    return periods, confidence, meta
+
+
 def ingest_file(path: str, year: int, entity: str | None = None) -> tuple[list[PeriodFinancials], list[IngestionFlag], float | None, dict]:
     flags: list[IngestionFlag] = []
     ext = path.lower().rsplit(".", 1)[-1]
@@ -88,7 +158,34 @@ def ingest_file(path: str, year: int, entity: str | None = None) -> tuple[list[P
                 f"PDF extraction ({label} confidence, {method} method, "
                 f"{pages}/{total} pages, {nper} period(s): {', '.join(meta.get('years', [])) or 'n/a'}) "
                 f"— human review required."
-            ),
+            )
+            if meta.get("review_required") else
+            f"PDF extraction ({label} confidence, {method} method, {nper} period(s)).",
+        ))
+    elif ext in ("md", "txt", "markdown"):
+        raw = Path(path).read_text(encoding="utf-8", errors="ignore")
+        periods, confidence, meta = parse_markdown_document(raw, entity, str(year))
+        label = meta.get("confidence_label", "low")
+        method = meta.get("extraction_method", "unknown")
+        nper = len(periods)
+        flags.append(IngestionFlag(
+            level="warning" if (label != "high" or meta.get("review_required")) else "info",
+            message=(
+                f"Markdown extraction ({label} confidence, {method} method, "
+                f"{nper} period(s): {', '.join(meta.get('years', [])) or 'n/a'}) "
+                f"— human review required."
+            )
+            if meta.get("review_required") else
+            f"Markdown extraction ({label} confidence, {method} method, {nper} period(s)).",
+        ))
+    elif ext == "json":
+        raw = Path(path).read_text(encoding="utf-8", errors="ignore")
+        periods, confidence, meta = parse_json_document(raw, str(year))
+        label = meta.get("confidence_label", "low")
+        nper = len(periods)
+        flags.append(IngestionFlag(
+            level="info",
+            message=f"JSON extraction ({label} confidence, {nper} period(s): {', '.join(meta.get('years', [])) or 'n/a'}).",
         ))
     else:
         raise ValueError(f"Unsupported file type: .{ext}")

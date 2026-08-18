@@ -534,6 +534,19 @@ def _parse_markdown_to_periods(
     return periods, meta
 
 
+def parse_markdown_document(
+    text: str, entity: str | None = None, fallback_year: str = "2023"
+) -> tuple[list[PeriodFinancials], float, dict]:
+    """Parse already-extracted Markdown (e.g. a user-supplied .md) into periods.
+
+    Same label matcher and year-column logic as the PDF pipeline, but skips the
+    PDF→Markdown conversion step. Small text bodies upload cleanly through the
+    Vercel request-body size limit that blocks large PDFs.
+    """
+    periods, meta = _parse_markdown_to_periods(text, entity, fallback_year)
+    return periods, meta.get("confidence", 0.0), meta
+
+
 def parse_pdf_document(
     path: str, entity: str | None = None, fallback_year: str = "2023"
 ) -> tuple[list[PeriodFinancials], float, dict]:
