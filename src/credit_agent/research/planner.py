@@ -2,16 +2,16 @@
 
 Generates the set of search queries a credit analyst needs: demand, input-cost
 exposure, competitive position, macro, ESG/regulation and rates. Queries are
-sector-templated so retrieval is specific (e.g. "stainless steel price trend"
-for a drinkware manufacturer) rather than vague. This is the first guard against
-mismatched information: precise queries in -> relevant sources out.
+sector-templated via the ``{sector}`` token so retrieval stays specific to
+whatever obligor is being assessed — the module is sector-agnostic and never
+assumes a particular industry. Precise queries in -> relevant sources out.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel
 
-DEFAULT_SECTOR = "sustainable drinkware / reusable beverage containers"
+DEFAULT_SECTOR = "the client's industry"
 
 
 class ResearchQuery(BaseModel):
@@ -28,28 +28,28 @@ _TEMPLATES: dict[str, tuple[str, str, str]] = {
         "Market size, CAGR, demand growth figures with a source and date.",
     ),
     "trends": (
-        "sustainable drinkware consumer trends ESG reusable bottles 2024",
-        "Understand structural tailwinds (sustainability, regulation of single-use plastics).",
-        "Qualitative/quantitative evidence of shifting consumer and regulatory demand.",
+        "{sector} industry trends consumer ESG regulatory tailwinds 2024",
+        "Understand structural tailwinds (sustainability, regulation, shifting demand).",
+        "Qualitative/quantitative evidence of shifting demand and regulatory context.",
     ),
     "input_costs": (
-        "stainless steel aluminum commodity price trend 2024 beverage packaging",
-        "Drinkware is input-cost exposed; monitor pass-through ability and margin risk.",
-        "Recent price moves for key inputs (steel/aluminium) with timeframe.",
+        "{sector} key input cost commodity price trend 2024 2025",
+        "Monitor input-cost exposure and the client's ability to pass costs through to margin.",
+        "Recent price moves for key inputs with timeframe.",
     ),
     "competitive": (
-        "reusable drinkware competitive landscape leading manufacturers market share",
+        "{sector} competitive landscape leading companies market share",
         "Evaluate the client's relative position versus established and low-cost producers.",
         "Competitor set, concentration, and any share-shift evidence.",
     ),
     "macro": (
-        "consumer discretionary spending outlook 2024 2025",
-        "Demand for drinkware is consumer-discretionary; macro sensitivity matters.",
-        "Consumer confidence / spending outlook statements from reputable sources.",
+        "{sector} end-market demand macro outlook 2024 2025",
+        "End-market demand is macro-sensitive; assess the spending/cycle outlook.",
+        "Consumer/business confidence and spending outlook from reputable sources.",
     ),
     "regulation": (
-        "single-use plastic ban regulation reusable drinkware policy 2024",
-        "Regulation is a key credit catalyst for the sustainable-drinkware thesis.",
+        "{sector} regulation policy 2024 2025",
+        "Regulation can be a key credit catalyst or risk for the client's thesis.",
         "Specific regulations, geographies and effective dates.",
     ),
     "rates": (

@@ -25,12 +25,12 @@ MEDIUM_TIER = (
 )
 
 DIMENSION_KEYWORDS = {
-    "demand": ["market", "growth", "cagr", "demand", "size", "forecast", "drinkware", "bottle"],
-    "trends": ["trend", "sustainab", "esg", "reusable", "consumer", "eco"],
-    "input_costs": ["steel", "alumin", "commodity", "price", "cost", "input", "metal"],
+    "demand": ["market", "growth", "cagr", "demand", "size", "forecast"],
+    "trends": ["trend", "sustainab", "esg", "consumer", "eco", "shift", "behaviour"],
+    "input_costs": ["commodity", "price", "cost", "input", "raw material", "margin", "pass-through"],
     "competitive": ["competit", "market share", "landscape", "player", "rival", "brand"],
-    "macro": ["consumer", "spending", "gdp", "outlook", "economy", "discretionary"],
-    "regulation": ["ban", "plastic", "regulat", "policy", "law", "compliance", "single-use"],
+    "macro": ["consumer", "spending", "gdp", "outlook", "economy", "cycle"],
+    "regulation": ["regulat", "policy", "law", "compliance", "ban", "mandate", "legislation"],
     "rates": ["rate", "fed", "interest", "monetary", "central bank", "inflation"],
 }
 
