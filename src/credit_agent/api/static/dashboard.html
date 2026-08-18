@@ -67,7 +67,7 @@ input,textarea,select{font-family:inherit}
       </div>
       <div class="grid sm:grid-cols-2 gap-4 mt-5">
         <div><label class="text-sm font-medium">Company</label><input id="dCompany" class="field mt-1" placeholder="Client name" /></div>
-        <div><label class="text-sm font-medium">Sector</label><input id="dSector" class="field mt-1" placeholder="e.g. sustainable drinkware" /></div>
+        <div><label class="text-sm font-medium">Sector</label><input id="dSector" class="field mt-1" placeholder="e.g. banking, manufacturing, retail" /></div>
       </div>
       <div class="mt-3"><label class="text-sm font-medium">Company background</label>
         <textarea id="dBackground" rows="2" class="field mt-1" placeholder="HQ, customer base, capex strategy — shown verbatim in the brief."></textarea></div>
@@ -78,6 +78,11 @@ input,textarea,select{font-family:inherit}
         </div>
         <button id="buildDash" class="btn btn-amber">Build dashboard<span class="ic">→</span></button>
       </div>
+      <p class="text-ink-soft text-xs mt-2">Large PDF over the ~4.5 MB upload limit? Convert it to Markdown first with a free tool —
+        <a class="text-amber-deep underline" href="https://www.pdf2md.net/" target="_blank" rel="noopener">pdf2md.net</a>,
+        <a class="text-amber-deep underline" href="https://pdf2md.io/" target="_blank" rel="noopener">pdf2md.io</a>
+        or <a class="text-amber-deep underline" href="https://cloudconvert.com/pdf-to-md" target="_blank" rel="noopener">CloudConvert</a>
+        — then upload the <code>.md</code> (text has no size limit; <code>.json</code>/<code>.txt</code> work too).</p>
       <p id="dashErr" class="hidden text-burnt text-sm font-medium mt-3"></p>
     </div>
   </section>
