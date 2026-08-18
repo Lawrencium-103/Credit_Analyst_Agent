@@ -8,6 +8,8 @@ is normalised into `PeriodFinancials` and merged into one `IngestionResult`.
 
 from __future__ import annotations
 
+import os
+
 import openpyxl
 from pydantic import BaseModel, Field
 
@@ -18,7 +20,7 @@ from ..schema.financials import (
     PeriodFinancials,
 )
 from .generic_xlsx import parse_generic_xlsx_multi
-from .pdf import parse_pdf_with_confidence
+from .pdf import parse_pdf_document
 from ..spreading.loader import load_sc_workbook
 
 SC_SHEETS = {"I. Profit_Loss", "I. Balance_Sheet", "I. Cashflow"}
@@ -74,40 +76,84 @@ def ingest_file(path: str, year: int, entity: str | None = None) -> tuple[list[P
                 message=f"Non-Standard-Chartered workbook ({n} period{'s' if n > 1 else ''}) — keyword extraction, human review required.",
             ))
     elif ext == "pdf":
-        period, confidence, meta = parse_pdf_with_confidence(path, str(year), entity)
-        periods = [period]
+        periods, confidence, meta = parse_pdf_document(path, entity, str(year))
         label = meta.get("confidence_label", "low")
         method = meta.get("extraction_method", "unknown")
         pages = meta.get("pages_with_data", 0)
         total = meta.get("total_pages", 0)
+        nper = len(periods)
         flags.append(IngestionFlag(
-            level="warning" if label != "high" else "info",
+            level="warning" if (label != "high" or meta.get("review_required")) else "info",
             message=(
                 f"PDF extraction ({label} confidence, {method} method, "
-                f"{pages}/{total} pages yielded data) — human review required."
+                f"{pages}/{total} pages, {nper} period(s): {', '.join(meta.get('years', [])) or 'n/a'}) "
+                f"— human review required."
             ),
         ))
-        periods = _reyear(periods, year)
     else:
         raise ValueError(f"Unsupported file type: .{ext}")
 
     return periods, flags, confidence, meta
 
 
+def _iter_fields(pf: PeriodFinancials):
+    for stmt_name in ("income_statement", "balance_sheet", "cash_flow"):
+        sub = getattr(pf, stmt_name)
+        for field_name in type(sub).model_fields:
+            yield stmt_name, field_name, getattr(sub, field_name)
+
+
+def _merge_period(existing, new, src, provenance, conflicts):
+    """Merge `new` into `existing` field-by-field.
+
+    Fields present in only one source are kept; fields present in both with
+    equal values are reconciled; differing values are recorded as conflicts
+    (the existing value is preserved) so nothing is silently overwritten.
+    """
+    for stmt_name, field_name, value in _iter_fields(new):
+        if value is None:
+            continue
+        cur = getattr(getattr(existing, stmt_name), field_name)
+        if cur is None:
+            setattr(getattr(existing, stmt_name), field_name, value)
+            provenance[f"{stmt_name}.{field_name}"] = src
+        elif cur != value:
+            conflicts.append(
+                f"{stmt_name}.{field_name} for period {new.period}: "
+                f"{src} provided {value}, prior value {cur}"
+            )
+            provenance[f"{stmt_name}.{field_name}"] = f"CONFLICT ({src} vs prior)"
+
+
 def ingest(items: list[dict]) -> IngestionResult:
     """items: list of {path, year, entity?}."""
     by_year: dict[str, PeriodFinancials] = {}
+    provenance: dict[str, dict] = {}
     all_flags: list[IngestionFlag] = []
     entity_name = "Unknown entity"
     currency: str | None = None
     overall_confidence: float | None = None
     all_meta: dict = {}
+    conflicts: list[str] = []
 
     for it in items:
         periods, flags, confidence, meta = ingest_file(it["path"], int(it["year"]), it.get("entity"))
         all_flags.extend(flags)
+        src = "SC workbook" if _is_sc(it["path"]) else os.path.basename(it["path"])
         for p in periods:
-            by_year[p.period] = p
+            if p.period not in by_year:
+                by_year[p.period] = p
+                prov = provenance.setdefault(p.period, {})
+                for stmt_name, field_name, value in _iter_fields(p):
+                    if value is not None:
+                        prov[f"{stmt_name}.{field_name}"] = src
+            else:
+                # Same period supplied by more than one file. Merge
+                # field-by-field instead of silently overwriting, and record
+                # conflicts so the analyst can see the clash.
+                existing = by_year[p.period]
+                prov = provenance.setdefault(p.period, {})
+                _merge_period(existing, p, src, prov, conflicts)
         if it.get("entity"):
             entity_name = it["entity"]
         # Track confidence from PDF extractions
@@ -125,6 +171,20 @@ def ingest(items: list[dict]) -> IngestionResult:
                 currency = cf.currency
         except Exception:
             pass
+
+    if conflicts:
+        shown = conflicts[:8]
+        more = len(conflicts) - len(shown)
+        msg = (
+            "Period collision across uploaded files — same period set by multiple "
+            "files with differing values: " + "; ".join(shown)
+        )
+        if more > 0:
+            msg += f"; +{more} more"
+        all_flags.append(IngestionFlag(level="warning", message=msg))
+
+    if provenance:
+        all_meta["provenance"] = provenance
 
     periods = [by_year[y] for y in sorted(by_year, key=lambda x: int(x))]
 

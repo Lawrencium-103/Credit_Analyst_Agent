@@ -172,7 +172,7 @@ details>.inner{padding:0 1.5rem 1.5rem}
       </div>
 
       <!-- Extracted data (collapsible) -->
-      <details class="reveal mt-6" id="matrixDetails">
+      <details class="reveal mt-6" id="matrixDetails" open>
         <summary><span class="eyebrow" style="margin:0">Extracted Financials</span></summary>
         <div class="inner">
           <div id="matrixWrap" class="overflow-x-auto"></div>
@@ -260,6 +260,10 @@ details>.inner{padding:0 1.5rem 1.5rem}
           <div>
             <label class="text-sm font-medium">Purpose</label>
             <textarea id="rptPurpose" rows="2" class="field mt-1" placeholder="What question does this report answer?"></textarea>
+          </div>
+          <div class="mt-3">
+            <label class="text-sm font-medium">Company background</label>
+            <textarea id="rptBackground" rows="3" class="field mt-1" placeholder="HQ, customer base, capex strategy, funding mix, reason for seeking credit — anything that frames the obligor. Shown verbatim in the brief."></textarea>
           </div>
 
           <div class="grid sm:grid-cols-3 gap-3 mt-2">
@@ -607,6 +611,8 @@ $("#dlReport").addEventListener("click",async()=>{
       analyst_name:$("#rptAnalyst").value,
       company_name:$("#rptCompany").value||STATE.result?.entity_name||"Client",
       purpose:$("#rptPurpose").value||null,
+      sector:$("#rSector").value||null,
+      company_background:$("#rptBackground").value||null,
       periods:STATE.result?.periods||null,
     };
     if(fmt==="md"){

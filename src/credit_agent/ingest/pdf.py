@@ -362,3 +362,192 @@ def parse_pdf_with_confidence(
     }
 
     return result, confidence, meta
+
+
+# ── Whole-document Markdown pipeline (multi-page / multi-year) ────────────────
+#
+# Converts the entire PDF to Markdown first (pymupdf4llm), then splits it into
+# statement sections. Each section's Markdown table is parsed for its YEAR
+# columns, so a 2- (or 3-) year annual report yields multiple PeriodFinancials
+# instead of the single collapsed period the page-by-page path produces. Text
+# sections without a table fall back to the keyword heuristic (one period).
+
+_STMT_PATTERNS = [
+    ("income", re.compile(r"income statement|statement of operations|consolidated statements? of (income|operations|earnings)|statements of income", re.I)),
+    ("balance", re.compile(r"balance sheet|statement of financial position|statements? of financial position|consolidated statements? of financial position", re.I)),
+    ("cashflow", re.compile(r"cash ?flow|statement of cash flows|statements? of cash flows", re.I)),
+]
+_YEAR_RE = re.compile(r"(?:19|20)\d{2}")
+
+
+def _match_label(label: str) -> str | None:
+    """Match a statement label to a canonical field.
+
+    Uses the LONGEST matching keyword so specific phrases win over broad
+    substrings (e.g. "cost of sales" must map to `cogs`, not to `revenue`
+    via the "sales" keyword).
+    """
+    best = None
+    best_len = 0
+    for field, keywords in _LABEL_MAP:
+        for kw in keywords:
+            if kw in label and len(kw) > best_len:
+                best = field
+                best_len = len(kw)
+    return best
+
+
+def _split_statements(md: str) -> list[tuple[str | None, str]]:
+    """Split Markdown into (statement_type, text) sections by header detection."""
+    sections: list[tuple[str | None, list[str]]] = []
+    current_type: str | None = None
+    current_lines: list[str] = []
+    for line in md.splitlines():
+        stripped = line.strip()
+        matched = None
+        for stype, pat in _STMT_PATTERNS:
+            if pat.search(stripped):
+                matched = stype
+                break
+        if matched:
+            sections.append((current_type, "\n".join(current_lines)))
+            current_type = matched
+            current_lines = [line]
+        else:
+            current_lines.append(line)
+    sections.append((current_type, "\n".join(current_lines)))
+    return [(t, txt) for t, txt in sections if txt.strip()]
+
+
+def _extract_year_columns(header_cells: list[str]) -> list[tuple[int, int]]:
+    """Return [(data_index, year), ...] for header cells containing a 4-digit year."""
+    cols = []
+    for i, cell in enumerate(header_cells):
+        m = _YEAR_RE.search(cell)
+        if m:
+            cols.append((i, int(m.group(0))))
+    return cols
+
+
+def _parse_section_table(text: str) -> dict[str, dict[int, float]] | None:
+    """Parse the first Markdown table in a section into {field: {year: value}}."""
+    rows: list[list[str]] = []
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("|") and s.endswith("|"):
+            cells = [c.strip() for c in s.split("|")[1:-1]]
+            if cells and all(set(c) <= set("-: ") for c in cells):
+                continue  # separator row
+            rows.append(cells)
+        else:
+            if rows:
+                break  # only the first contiguous table
+    if len(rows) < 2:
+        return None
+    header = rows[0]
+    year_cols = _extract_year_columns(header)
+    if not year_cols:
+        return None
+    out: dict[str, dict[int, float]] = {}
+    for row in rows[1:]:
+        label = row[0].lower() if row else ""
+        if not label:
+            continue
+        field = _match_label(label)
+        if not field:
+            continue
+        for idx, yr in year_cols:
+            if idx < len(row):
+                val = parse_number(row[idx])
+                if val is not None:
+                    out.setdefault(field, {})[yr] = val
+    return out or None
+
+
+def _parse_markdown_to_periods(
+    md: str, entity: str | None = None, fallback_year: str = "2023"
+) -> tuple[list[PeriodFinancials], dict]:
+    sections = _split_statements(md)
+    stmt_data: dict[str, dict[str, dict[int, float]]] = {
+        "income": {}, "balance": {}, "cashflow": {}
+    }
+    any_table = False
+    detected_years: set[int] = set()
+
+    for stype, text in sections:
+        if stype in stmt_data:
+            tbl = _parse_section_table(text)
+            if tbl:
+                any_table = True
+                for f, ym in tbl.items():
+                    stmt_data[stype].setdefault(f, {}).update(ym)
+                    detected_years.update(ym.keys())
+                continue
+            # no table in a typed section -> heuristic (single period)
+            for f, (v, _src) in _heuristic_from_text(text).items():
+                if v is not None:
+                    stmt_data[stype].setdefault(f, {}).setdefault(int(fallback_year), v)
+        else:
+            # preamble / untyped section -> heuristic across all statements
+            for f, (v, _src) in _heuristic_from_text(text).items():
+                if v is None:
+                    continue
+                if f in IncomeStatement.model_fields:
+                    stmt_data["income"].setdefault(f, {}).setdefault(int(fallback_year), v)
+                elif f in BalanceSheet.model_fields:
+                    stmt_data["balance"].setdefault(f, {}).setdefault(int(fallback_year), v)
+                elif f in CashFlow.model_fields:
+                    stmt_data["cashflow"].setdefault(f, {}).setdefault(int(fallback_year), v)
+
+    years = sorted(detected_years) if detected_years else [int(fallback_year)]
+    periods: list[PeriodFinancials] = []
+    for yr in years:
+        periods.append(PeriodFinancials(
+            period=str(yr),
+            income_statement=IncomeStatement(
+                **{f: stmt_data["income"].get(f, {}).get(yr) for f in IncomeStatement.model_fields}),
+            balance_sheet=BalanceSheet(
+                **{f: stmt_data["balance"].get(f, {}).get(yr) for f in BalanceSheet.model_fields}),
+            cash_flow=CashFlow(
+                **{f: stmt_data["cashflow"].get(f, {}).get(yr) for f in CashFlow.model_fields}),
+        ))
+
+    distinct = {f for s in stmt_data.values() for f in s}
+    coverage = len(distinct) / len(_LABEL_MAP)
+    confidence = round(min(coverage, 1.0), 3)
+    method = "table" if any_table else "heuristic"
+    implicit_year = (not detected_years)
+    # Gate on extraction reliability, not on how many line items the PDF
+    # happened to disclose: a table parse with detected year columns is
+    # structurally trustworthy; heuristic or year-less parses need review.
+    review_required = (method != "table") or implicit_year
+
+    meta = {
+        "extraction_method": method,
+        "confidence": confidence,
+        "confidence_label": _confidence_label(confidence),
+        "years": [str(y) for y in years],
+        "review_required": bool(review_required),
+        "markdown": md,
+        "entity": entity,
+    }
+    return periods, meta
+
+
+def parse_pdf_document(
+    path: str, entity: str | None = None, fallback_year: str = "2023"
+) -> tuple[list[PeriodFinancials], float, dict]:
+    """Parse a whole PDF via the Markdown pipeline.
+
+    Returns (list[PeriodFinancials], confidence, metadata). Produces one
+    PeriodFinancials per detected fiscal year; falls back to a single period
+    labelled `fallback_year` when no year columns are found. `metadata` carries
+    `review_required` so callers can enforce a human-review gate.
+    """
+    md = pymupdf4llm.to_markdown(path)
+    periods, meta = _parse_markdown_to_periods(md, entity, fallback_year)
+    doc = fitz.open(path)
+    meta["total_pages"] = len(doc)
+    doc.close()
+    meta["pages_with_data"] = meta["total_pages"] if periods else 0
+    return periods, meta.get("confidence", 0.0), meta

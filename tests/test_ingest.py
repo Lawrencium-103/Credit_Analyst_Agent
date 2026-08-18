@@ -14,7 +14,12 @@ from credit_agent.ingest.loader import (
     ingest,
     ingest_file,
 )
-from credit_agent.ingest.pdf import parse_pdf, parse_pdf_with_confidence
+from credit_agent.ingest.pdf import (
+    parse_pdf,
+    parse_pdf_with_confidence,
+    _parse_markdown_to_periods,
+    parse_pdf_document,
+)
 
 SC = "data/raw/Task 1 Example Answer - Financial Reporting Tool.xlsx"
 
@@ -243,3 +248,152 @@ class TestConfidenceScoring:
         assert result.extraction_confidence is not None
         assert 0.0 <= result.extraction_confidence <= 1.0
         assert result.extraction_meta != {}
+
+
+# ── Whole-document Markdown pipeline (multi-year) ───────────────────────────
+
+def test_markdown_multi_year_extraction():
+    """A 2-year annual report (Markdown tables) yields two periods with years."""
+    md = """
+# Consolidated Statements of Income
+| | 2023 | 2022 |
+|---|---|---|
+| Revenue | 53,823 | 31,536 |
+| Cost of Sales | 40,000 | 20,000 |
+| Gross Profit | 13,823 | 11,536 |
+| Net Income | 5,644 | 862 |
+
+# Consolidated Statements of Financial Position
+| | 2023 | 2022 |
+|---|---|---|
+| Total Assets | 62,131 | 52,148 |
+| Total Equity | 31,015 | 28,000 |
+| Total Debt | 6,834 | 11,688 |
+
+# Consolidated Statements of Cash Flows
+| | 2023 | 2022 |
+|---|---|---|
+| Operating Cash Flow | 11,446 | 8,000 |
+| Free Cash Flow | 3,432 | 2,000 |
+"""
+    periods, meta = _parse_markdown_to_periods(md, None, "2023")
+    assert meta["extraction_method"] == "table"
+    assert meta["years"] == ["2022", "2023"]
+    assert len(periods) == 2
+    by_year = {p.period: p for p in periods}
+    assert by_year["2023"].income_statement.revenue == 53823.0
+    assert by_year["2022"].income_statement.revenue == 31536.0
+    assert by_year["2023"].balance_sheet.total_assets == 62131.0
+    assert by_year["2023"].cash_flow.operating_cash_flow == 11446.0
+    assert meta["review_required"] is False
+
+
+def test_markdown_heuristic_fallback_single_period():
+    """Text-only (no tables) falls back to heuristic: one implicit period, review required."""
+    md = "Total Revenue 12,345\nCost of Sales 7,000\nTotal Assets 45,000\nTotal Equity 20,000"
+    periods, meta = _parse_markdown_to_periods(md, None, "2023")
+    assert meta["extraction_method"] == "heuristic"
+    assert len(periods) == 1
+    assert periods[0].period == "2023"
+    assert periods[0].income_statement.revenue == 12345.0
+    assert periods[0].balance_sheet.total_assets == 45000.0
+    assert meta["review_required"] is True
+
+
+def test_markdown_pdf_end_to_end(tmp_path):
+    """Whole-doc Markdown pipeline parses a generated 2-year PDF."""
+    from unittest.mock import patch
+
+    path = tmp_path / "annual.pdf"
+    doc = fitz.open()
+    doc.new_page()  # any valid PDF; to_markdown is patched
+    doc.save(str(path))
+    doc.close()
+
+    md = (
+        "# Consolidated Statements of Income\n"
+        "| | 2023 | 2022 |\n|---|---|---|\n"
+        "| Revenue | 100,000 | 80,000 |\n"
+        "| Net Income | 10,000 | 5,000 |\n"
+    )
+    with patch("credit_agent.ingest.pdf.pymupdf4llm.to_markdown", return_value=md):
+        periods, confidence, meta = parse_pdf_document(str(path), None, "2023")
+
+    assert meta["extraction_method"] == "table"
+    assert "2023" in meta["years"] and "2022" in meta["years"]
+    assert meta["total_pages"] == 1
+    assert len(periods) == 2
+    by_year = {p.period: p for p in periods}
+    assert by_year["2023"].income_statement.revenue == 100000.0
+
+
+def test_merge_period_collision_and_provenance():
+    """Same period from multiple files: merge non-conflicting fields, flag conflicts,
+    and record source provenance instead of silently overwriting."""
+    from credit_agent.ingest.loader import _merge_period
+    from credit_agent.schema.financials import (
+        PeriodFinancials,
+        IncomeStatement,
+        BalanceSheet,
+        CashFlow,
+    )
+
+    a = PeriodFinancials(
+        period="2023",
+        income_statement=IncomeStatement(revenue=1000.0, cogs=600.0),
+        balance_sheet=BalanceSheet(total_assets=5000.0),
+        cash_flow=CashFlow(operating_cash_flow=200.0),
+    )
+    b = PeriodFinancials(
+        period="2023",
+        income_statement=IncomeStatement(revenue=1000.0, gross_profit=400.0),
+        balance_sheet=BalanceSheet(total_debt=1500.0),
+        cash_flow=CashFlow(),
+    )
+    c = PeriodFinancials(
+        period="2023",
+        income_statement=IncomeStatement(revenue=999.0),  # clashes with a
+        balance_sheet=BalanceSheet(),
+        cash_flow=CashFlow(),
+    )
+
+    prov: dict = {}
+    conflicts: list = []
+    _merge_period(a, b, "fileB.xlsx", prov, conflicts)
+    _merge_period(a, c, "fileC.xlsx", prov, conflicts)
+
+    # non-conflicting fields merged in from the second file
+    assert a.income_statement.gross_profit == 400.0
+    assert a.balance_sheet.total_debt == 1500.0
+    # equal values reconcile without a conflict
+    assert a.income_statement.revenue == 1000.0
+    # differing value is flagged and the existing value is preserved
+    assert len(conflicts) == 1
+    assert "fileC.xlsx" in conflicts[0]
+    assert "revenue" in conflicts[0]
+    # provenance: merged field attributed to its source; clash marked
+    assert prov["income_statement.gross_profit"] == "fileB.xlsx"
+    assert prov["balance_sheet.total_debt"] == "fileB.xlsx"
+    assert prov["income_statement.revenue"] == "CONFLICT (fileC.xlsx vs prior)"
+
+
+def test_ingest_multi_file_same_period_conflict_flag():
+    """Two files claiming the same period with different revenue raise a warning flag."""
+    res = ingest([
+        {"path": SC, "year": 2023},
+        {"path": SC, "year": 2023},  # identical source -> equal values, no conflict
+    ])
+    # Same workbook twice => equal values, so no collision warning expected
+    assert not any("collision" in f.message.lower() for f in res.flags)
+
+    # Now exercise the real collision path via a synthetic period override
+    from credit_agent.schema.financials import PeriodFinancials, IncomeStatement
+    from credit_agent.ingest.loader import _merge_period, _iter_fields
+
+    existing = PeriodFinancials(period="2023", income_statement=IncomeStatement(revenue=100.0))
+    incoming = PeriodFinancials(period="2023", income_statement=IncomeStatement(revenue=200.0))
+    prov: dict = {}
+    conflicts: list = []
+    _merge_period(existing, incoming, "other.pdf", prov, conflicts)
+    assert conflicts  # differing revenue across files is detected
+

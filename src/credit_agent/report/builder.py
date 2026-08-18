@@ -31,6 +31,35 @@ RECOMMENDATION_BY_BAND = {
     "D": "DECLINE",
 }
 
+# Real-life ways credit assessments commonly miss risk. These are methodology prompts
+# for the analyst to verify — never assertions about a specific client. Advisory only.
+_BLIND_SPOTS = [
+    "Concentration risk — a single customer, supplier, region or channel >20% of revenue/inputs "
+    "can trigger sudden default if that counterparty shifts or distresses; verify top-5 shares.",
+    "Related-party & off-balance-sheet — guarantees, letters of credit, contingent liabilities and "
+    "related-party deals rarely appear in the statements; confirm via filings and director disclosures.",
+    "Hidden leverage — operating leases, pensions, factoring or shareholder loans can sit "
+    "off-balance-sheet, so true leverage may exceed reported debt/equity; restate before judging.",
+    "Covenant blind spots — covenants outside the modelled set (springing, incurrence, guarantee) or "
+    "headroom that looks ample until one bad quarter; re-test against stress.",
+    "Rate & FX mismatch — floating-rate debt reprices higher in a tightening cycle and FX mismatched "
+    "to revenue can flip coverage; check the debt book's currency and basis.",
+    "Input-cost & commodity exposure — a key input can reprice faster than price can be passed through; "
+    "map gross-margin sensitivity to input costs.",
+    "Geopolitical & trade policy — sanctions, tariffs or export-licence changes in a dependent market "
+    "can erase revenue overnight; map geographic revenue and supply.",
+    "Operational & cyber disruption — single-site manufacturing, single-source supply or a cyber "
+    "incident can halt cash generation for quarters; assess continuity and redundancy.",
+    "Competitive shock — a rival merger, new entrant or substitute can compress margins or steal "
+    "share; track competitor moves and channel shift.",
+    "Event & fraud risk — financial-statement manipulation, key-person/succession gaps or a one-off "
+    "shock are rarely in the numbers until they hit; corroborate with non-financial signals.",
+    "ESG & regulatory — new environmental, labour or packaging regulation (and greenwashing backlash) "
+    "can impose sudden cost or block market access; monitor the regulatory pipeline.",
+    "Demand cyclicality — revenue tied to discretionary or capex-cycle demand can collapse in a "
+    "downturn before leverage adjusts; stress the demand side, not just the balance sheet.",
+]
+
 
 def _fmt(v):
     if v is None:
@@ -67,6 +96,8 @@ def assemble_report(
     research_report: dict | None = None,
     standards_assessment: dict | None = None,
     llm_assessment_markdown: str | None = None,
+    sector: str | None = None,
+    company_background: str | None = None,
 ) -> dict:
     blocks: list[dict] = []
     rating = analysis.get("risk_rating", {})
@@ -174,83 +205,32 @@ def assemble_report(
     blocks.append({"kind": "pagebreak"})
     blocks.append({"kind": "h1", "text": "Credit Brief"})
 
-    # Engagement
-    if purpose:
-        blocks.append({"kind": "p", "text":
-            f"{company_name} is reviewed to answer the following engagement question: "
-            f"“{purpose}”."})
-    else:
-        blocks.append({"kind": "p", "text":
-            f"{company_name} is reviewed as part of the annual credit assessment."})
-    blocks.append({"kind": "p", "text":
-        f"The internal risk rating is {band} (composite score {rating.get('composite_score')}, "
-        f"implied probability of default {rating.get('pd_estimate')}). All quantitative figures "
-        f"are computed from the statements; qualitative context is drawn from live industry "
-        f"research where available."})
+    # Engagement + Executive Summary
+    def _last(vals):
+        if not vals:
+            return None
+        for v in reversed(vals):
+            if v is not None:
+                return v
+        return None
 
-    # Performance narrative
-    rev_vals = kvals("revenue")
-    if rev_vals and any(v is not None for v in rev_vals) and periods:
-        first_rev = next((v for v in rev_vals if v is not None), None)
-        last_rev = next((v for v in reversed(rev_vals) if v is not None), None)
-        if len(periods) >= 2 and kyoy("revenue") and kyoy("revenue")[-1] is not None:
-            growth = f"{kyoy('revenue')[-1]*100:+.1f}% year-on-year in {periods[-1]}"
-        elif len(periods) >= 3 and kpis.get("revenue", {}).get("cagr") is not None:
-            growth = f"{kpis['revenue']['cagr']*100:.1f}% CAGR over {periods[0]}–{periods[-1]}"
-        else:
-            growth = "a movement versus the prior period"
-        em = rv("ebitda_margin")
-        nm = rv("net_margin")
-        margin_bits = []
-        if em is not None:
-            margin_bits.append(f"EBITDA margin {_fmt_ratio(em, ru('ebitda_margin') or '%')}")
-        if nm is not None:
-            margin_bits.append(f"net margin {_fmt_ratio(nm, ru('net_margin') or '%')}")
-        margin_txt = (" with " + " and ".join(margin_bits)) if margin_bits else ""
-        mword = {"improving": "strengthening", "deteriorating": "eroding"}.get(
-            traj_of("gross_margin"), "stable")
-        blocks.append({"kind": "h2", "text": "Financial performance"})
-        blocks.append({"kind": "p", "text":
-            f"Revenue reached {_fmt_num(last_rev, currency)} ({currency}) in {periods[-1]}, "
-            f"{growth}, up from {_fmt_num(first_rev, currency)} in {periods[0]}. "
-            f"Profitability is {mword}{margin_txt}."})
+    def _yoy(key):
+        g = kyoy(key)
+        return g[-1] if g else None
 
-    # Position & leverage narrative
-    ta, td, te = kvals("total_assets"), kvals("total_debt"), kvals("total_equity")
-    lev, ic = rv("debt_to_equity"), rv("interest_coverage")
-    if ta and any(v is not None for v in ta):
-        last_ta = next((v for v in reversed(ta) if v is not None), None)
-        last_td = next((v for v in reversed(td) if v is not None), None)
-        last_te = next((v for v in reversed(te) if v is not None), None)
-        lev_word = ("elevated" if (lev or 0) > 2 else "moderate" if (lev or 0) > 1 else "conservative")
-        pos_txt = (
-            f"As at {periods[-1]}, total assets of {_fmt_num(last_ta, currency)} are funded by "
-            f"total debt of {_fmt_num(last_td, currency)} and total equity of {_fmt_num(last_te, currency)}. "
-            f"Gearing (debt/equity) of "
-            f"{_fmt_ratio(lev, ru('debt_to_equity') or 'x') if lev is not None else 'n/a'} is {lev_word}")
-        if ic is not None:
-            pos_txt += (f", and interest coverage of {_fmt_ratio(ic, ru('interest_coverage') or 'x')} "
-                        f"{'comfortably services finance costs.' if ic >= 3 else 'leaves limited cushion above finance costs.'}")
-        blocks.append({"kind": "h2", "text": "Financial position & leverage"})
-        blocks.append({"kind": "p", "text": pos_txt})
+    def _kpi_bullet(key, label, note=None):
+        last = _last(kvals(key))
+        if last is None:
+            return None
+        g = _yoy(key)
+        txt = f"{label}: {_fmt_num(last, currency)}"
+        if g is not None:
+            txt += f" ({g*100:+.0f}% YoY)"
+        if note:
+            txt += f" — {note}"
+        return txt
 
-    # Cash narrative
-    ocf, fcf, cash = kvals("operating_cash_flow"), kvals("free_cash_flow"), kvals("cash_and_equivalents")
-    if ocf and any(v is not None for v in ocf):
-        last_ocf = next((v for v in reversed(ocf) if v is not None), None)
-        last_fcf = next((v for v in reversed(fcf) if v is not None), None)
-        last_cash = next((v for v in reversed(cash) if v is not None), None)
-        cash_word = "supports" if (last_fcf or 0) >= 0 else "strains"
-        cf_txt = (
-            f"Operating cash flow of {_fmt_num(last_ocf, currency)} and free cash flow of "
-            f"{_fmt_num(last_fcf, currency)} in {periods[-1]} {cash_word} debt service and "
-            f"capital expenditure.")
-        if last_cash is not None:
-            cf_txt += f" Cash and equivalents of {_fmt_num(last_cash, currency)} provide liquidity headroom."
-        blocks.append({"kind": "h2", "text": "Cash generation & liquidity"})
-        blocks.append({"kind": "p", "text": cf_txt})
-
-    # Strengths / watch items
+    # Strengths / weaknesses (feed Risk Assessment + Actionable Insights)
     strengths, weaknesses = [], []
     for cat, score in rating.get("category_scores", {}).items():
         if score is not None:
@@ -264,24 +244,211 @@ def assemble_report(
             weaknesses.append(f"{label} is deteriorating.")
         elif rt.get("trajectory") == "improving":
             strengths.append(f"{label} is improving.")
-    if strengths:
-        blocks.append({"kind": "h2", "text": "Key strengths"})
-        blocks.append({"kind": "bullets", "items": strengths})
-    if weaknesses:
-        blocks.append({"kind": "h2", "text": "Watch items & weaknesses"})
-        blocks.append({"kind": "bullets", "items": weaknesses})
 
-    # Industry & macro research
+    if purpose:
+        blocks.append({"kind": "p", "text":
+            f"{company_name} is reviewed to answer the following engagement question: "
+            f"“{purpose}”."})
+    else:
+        blocks.append({"kind": "p", "text":
+            f"{company_name} is reviewed as part of the annual credit assessment."})
+
+    last_rev = _last(kvals("revenue")); rev_g = _yoy("revenue")
+    em = rv("ebitda_margin"); nm = rv("net_margin")
+    exec_bits = []
+    if last_rev is not None:
+        bit = f"revenue of {_fmt_num(last_rev, currency)} ({currency})"
+        if rev_g is not None:
+            bit += f", up {rev_g*100:+.1f}% year-on-year"
+        exec_bits.append(bit)
+    mbits = []
+    if em is not None:
+        mbits.append(f"EBITDA margin {_fmt_ratio(em, ru('ebitda_margin') or '%')}")
+    if nm is not None:
+        mbits.append(f"net margin {_fmt_ratio(nm, ru('net_margin') or '%')}")
+    if mbits:
+        exec_bits.append(" and ".join(mbits))
+    sector_txt = f" in the {sector} sector" if sector else ""
+    exec_txt = (
+        f"{company_name}{sector_txt} is assessed as a {band}-rated credit "
+        f"(composite {rating.get('composite_score')}, implied PD {rating.get('pd_estimate')}). "
+    )
+    if exec_bits:
+        exec_txt += "The latest period shows " + "; ".join(exec_bits) + ". "
+    exec_txt += f"The recommendation is {rec}, subject to the conditions set out below."
+    blocks.append({"kind": "h2", "text": "Executive Summary"})
+    blocks.append({"kind": "p", "text": exec_txt})
+    blocks.append({"kind": "p", "text":
+        f"All quantitative figures are computed from the statements for {', '.join(periods) or 'n/a'}; "
+        f"qualitative context is drawn from live industry research where available."})
+
+    # Company overview (user-supplied context; rendered verbatim, never invented)
+    if company_background and company_background.strip():
+        blocks.append({"kind": "h2", "text": "Company Overview"})
+        blocks.append({"kind": "p", "text": company_background.strip()})
+
+    # ---- Financial Analysis ----
+    blocks.append({"kind": "h2", "text": "Financial Analysis"})
+
+    blocks.append({"kind": "h3", "text": "Revenue and Profitability"})
+    rp = []
+    for key in ("revenue", "ebitda", "operating_profit", "net_income"):
+        b = _kpi_bullet(key, key.replace("_", " ").title())
+        if b:
+            rp.append(b)
+    if em is not None:
+        rp.append(f"EBITDA margin: {_fmt_ratio(em, ru('ebitda_margin') or '%')} ({traj_of('ebitda_margin')}).")
+    if nm is not None:
+        rp.append(f"Net margin: {_fmt_ratio(nm, ru('net_margin') or '%')} ({traj_of('net_margin')}).")
+    if rp:
+        blocks.append({"kind": "bullets", "items": rp})
+
+    blocks.append({"kind": "h3", "text": "Assets and Liabilities"})
+    cash_g = _yoy("cash_and_equivalents"); capex_g = _yoy("capital_expenditures")
+    cash_note = None
+    if cash_g is not None and cash_g < 0 and capex_g is not None and capex_g > 0:
+        cash_note = "reflecting higher capital expenditure and debt repayment; monitor liquidity"
+    al = []
+    for key, lbl in (("total_assets", "Total Assets"), ("inventory", "Inventory"),
+                     ("cash_and_equivalents", "Cash & equivalents"),
+                     ("total_liabilities", "Total Liabilities"),
+                     ("total_equity", "Net Worth (Total Equity)")):
+        b = _kpi_bullet(key, lbl, note=cash_note if key == "cash_and_equivalents" else None)
+        if b:
+            al.append(b)
+    if al:
+        blocks.append({"kind": "bullets", "items": al})
+
+    blocks.append({"kind": "h3", "text": "Cash Flow"})
+    cf = []
+    for key in ("operating_cash_flow", "capital_expenditures", "free_cash_flow"):
+        b = _kpi_bullet(key, key.replace("_", " ").title())
+        if b:
+            cf.append(b)
+    if cf:
+        blocks.append({"kind": "bullets", "items": cf})
+
+    # ---- Key Financial Ratios ----
+    blocks.append({"kind": "h2", "text": "Key Financial Ratios"})
+    blocks.append({"kind": "h3", "text": "Profitability Ratios"})
+    prof = []
+    for k in ("gross_margin", "ebitda_margin", "operating_margin", "net_margin"):
+        v = rv(k)
+        if v is not None:
+            prof.append(f"{ratios_by_key.get(k, {}).get('label', k)}: "
+                        f"{_fmt_ratio(v, ru(k) or '%')} ({traj_of(k)}).")
+    if prof:
+        blocks.append({"kind": "bullets", "items": prof})
+
+    blocks.append({"kind": "h3", "text": "Leverage and Liquidity Ratios"})
+    ll = []
+    for k in ("interest_coverage", "ebitda_interest_cover", "current_ratio", "quick_ratio",
+              "cash_ratio", "debt_to_equity", "leverage_metric", "net_leverage", "cf_capex"):
+        v = rv(k)
+        if v is not None:
+            ll.append(f"{ratios_by_key.get(k, {}).get('label', k)}: "
+                      f"{_fmt_ratio(v, ru(k) or 'x')} ({traj_of(k)}).")
+    if ll:
+        blocks.append({"kind": "bullets", "items": ll})
+
+    # ---- Key strengths ----
+    if strengths:
+        blocks.append({"kind": "h2", "text": "Key Strengths"})
+        blocks.append({"kind": "bullets", "items": strengths})
+
+    # ---- Risk Assessment ----
+    blocks.append({"kind": "h2", "text": "Risk Assessment"})
+    blocks.append({"kind": "h3", "text": "Key Financial Risks"})
+    risks = []
+    liq = [k for k in ("current_ratio", "quick_ratio", "cash_ratio")
+           if traj.get(k, {}).get("trajectory") == "deteriorating"]
+    if liq:
+        risks.append(
+            "Liquidity Risk: current/quick/cash ratios are softening, reducing the cushion to "
+            "meet short-term obligations; monitor cash and working capital closely.")
+    cfk = rv("cf_capex")
+    capex_up = (_yoy("capital_expenditures") or 0) > 0
+    if (cfk is not None and traj.get("cf_capex", {}).get("trajectory") == "deteriorating") or capex_up:
+        risks.append(
+            "Capital Expenditure Risk: capital expenditure is elevated relative to operating cash "
+            "flow, straining free cash flow; ensure investment is aligned with cash generation.")
+    if traj.get("net_leverage", {}).get("trajectory") == "deteriorating" or (rv("leverage_metric") or 0) > 4:
+        risks.append(
+            "Leverage Risk: leverage has increased (notably via a lower cash balance); maintain "
+            "discipline as EBITDA normalises.")
+    invg = _yoy("inventory")
+    if invg is not None and invg > 0.2:
+        risks.append(
+            f"Inventory Risk: inventory rose {invg*100:+.0f}% YoY; manage stock efficiently to "
+            f"avoid overstocking and holding costs.")
+    if not risks:
+        risks.append("No elevated financial risks are identified on the available trends; the profile is stable to improving.")
+    for i, r in enumerate(risks, 1):
+        blocks.append({"kind": "p", "text": f"{i}. {r}"})
+
+    # ---- Actionable Insights ----
+    blocks.append({"kind": "h2", "text": "Actionable Insights"})
+    actions = []
+    if any(("liquidity" in r.lower() or "current" in r.lower()) for r in weaknesses):
+        actions.append("Enhance liquidity management — rebuild cash reserves and optimise current-asset utilisation.")
+    if capex_up or (cfk is not None and cfk < 0):
+        actions.append("Monitor capital expenditure against operating cash flow to preserve financial stability.")
+    if any("leverage" in r.lower() for r in risks + weaknesses):
+        actions.append("Maintain leverage discipline — protect profitability and a healthy cash balance.")
+    if invg is not None and invg > 0.2:
+        actions.append("Streamline inventory processes to align with sales growth and minimise holding costs.")
+    tight = [c for c in analysis.get("covenants", [])
+             if str(c.get("status", "")).upper() in ("WATCH", "BREACH", "FAIL")]
+    if tight:
+        actions.append("Monitor covenant headroom: " + ", ".join(c["name"] for c in tight) + ".")
+    if analysis.get("stress_scenarios"):
+        actions.append("Re-test under stress scenarios each cycle; track rating migration and any covenant breaches.")
+    actions.append("Refresh industry and macro research at every review.")
+    if not actions:
+        actions.append("Maintain quarterly monitoring of covenants, liquidity and capex intensity.")
+    for i, a in enumerate(actions, 1):
+        blocks.append({"kind": "p", "text": f"{i}. {a}"})
+
+    # Adjacent Analysis (blind-spot scan) — advisory only, never alters judgement
+    blocks.append({"kind": "h2", "text": "Adjacent Analysis (Blind-spot Scan)"})
+    blocks.append({"kind": "p", "text":
+        "Advisory only — these external signals and structural prompts do not alter the "
+        "internal rating or recommendation. They are prompts for the analyst to investigate "
+        "further before relying on this assessment."})
+
+    # Sourced external signals (if live research ran)
+    blocks.append({"kind": "h3", "text": "External signals (sourced)"})
+    if research_report and research_report.get("findings"):
+        adj = []
+        for f in research_report.get("findings", [])[:6]:
+            claim = (f.get("claim") or "").strip()
+            url = f.get("source_url") or ""
+            if claim:
+                adj.append(f"{claim} [{url}]" if url else claim)
+        if adj:
+            blocks.append({"kind": "bullets", "items": adj})
+    else:
+        blocks.append({"kind": "p", "text":
+            "No live research was performed, so no external signals are listed. Enable industry "
+            "research to surface competitor, geopolitical and regulatory signals specific to this obligor."})
+
+    # Curated blind-spot framework — how risk is commonly missed in real life
+    blocks.append({"kind": "h3", "text": "Blind-spot checklist (verify against this obligor)"})
+    blocks.append({"kind": "p", "text":
+        "Common ways credit assessments miss risk — prompts to investigate, not findings about this client:"})
+    blocks.append({"kind": "bullets", "items": _BLIND_SPOTS})
+
+    # Industry & macro research (narrative context)
     if research_markdown or research_report:
-        blocks.append({"kind": "h2", "text": "Industry & macro context"})
+        blocks.append({"kind": "h2", "text": "Industry & Macro Context"})
         if research_report:
             rep = research_report
             blocks.append({"kind": "p", "text":
                 f"Live research drew on {len(rep.get('sources', []))} sources at "
                 f"{rep.get('overall_confidence', 0):.2f} validation confidence. "
                 f"Sector: {rep.get('sector', 'n/a')}."})
-            for f in rep.get("findings", [])[:8]:
-                blocks.append({"kind": "bullets", "items": [f"{f.get('claim', '')} [{f.get('source_url', '')}]"]})
+            if research_markdown:
+                blocks.append({"kind": "p", "text": research_markdown[:2000]})
         elif research_markdown:
             blocks.append({"kind": "p", "text": research_markdown[:3000]})
 

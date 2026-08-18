@@ -166,6 +166,8 @@ def _assemble_report(body: dict) -> dict | tuple:
         research_report=research_report,
         standards_assessment=standards,
         llm_assessment_markdown=llm_md,
+        sector=body.get("sector"),
+        company_background=body.get("company_background"),
     )
 
 
