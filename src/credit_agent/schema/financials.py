@@ -21,6 +21,7 @@ class IncomeStatement(BaseModel):
     ebit: float | None = None
     interest_expense: float | None = None
     interest_income: float | None = None
+    net_interest_income: float | None = None
     pretax_income: float | None = None
     tax_expense: float | None = None
     net_income: float | None = None
@@ -41,6 +42,9 @@ class BalanceSheet(BaseModel):
     total_debt: float | None = None
     total_equity: float | None = None
     retained_earnings: float | None = None
+    loans_and_advances: float | None = None
+    customer_deposits: float | None = None
+    non_performing_loans: float | None = None
 
 
 class CashFlow(BaseModel):

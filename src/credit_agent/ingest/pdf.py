@@ -99,8 +99,64 @@ _LABEL_MAP: list[tuple[str, list[str]]] = [
                              "cash flow from financing activities",
                              "financing cash flow"]),
     ("dividends_paid", ["dividends paid", "dividends paid to shareholders",
-                        "dividends declared"]),
+                         "dividends declared"]),
 ]
+
+# Bank / financial-institution label map. Banks do not have COGS or inventory;
+# their top line is interest income and their balance sheet is loans + deposits.
+# Mapped onto the canonical schema so revenue = interest income, etc. Bank-only
+# fields (loans_and_advances, customer_deposits, non_performing_loans,
+# net_interest_income) are also captured for bank-specific ratios.
+_BANK_LABEL_MAP: list[tuple[str, list[str]]] = [
+    ("revenue", ["interest income", "gross earnings", "total interest income",
+                 "net interest income and other income", "total revenue", "operating income"]),
+    ("net_interest_income", ["net interest income", "net interest income after impairment",
+                             "net interest margin income"]),
+    ("interest_income", ["interest income", "interest and similar income"]),
+    ("interest_expense", ["interest expense", "finance costs", "interest and similar expenses",
+                          "interest on deposits"]),
+    ("operating_expenses", ["operating expenses", "total operating expenses",
+                            "personnel expenses", "other operating expenses", "total operating cost"]),
+    ("depreciation_amortization", ["depreciation and amortisation", "depreciation and amortization",
+                                   "depreciation", "amortisation", "amortization"]),
+    ("pretax_income", ["profit before tax", "profit before taxation", "income before tax",
+                       "profit before taxation and zakat"]),
+    ("tax_expense", ["income tax expense", "tax expense", "taxation", "tax and zakat"]),
+    ("net_income", ["net profit", "net income", "profit for the year", "profit after tax",
+                    "net earnings", "profit for the period"]),
+    ("cash_and_equivalents", ["cash and cash equivalents", "cash at bank and in hand",
+                              "balances with central banks", "cash and balances with central banks"]),
+    ("marketable_securities", ["trading securities", "financial assets at fair value", "held-for-trading"]),
+    ("accounts_receivable", ["other receivables", "trade and other receivables", "other assets"]),
+    ("loans_and_advances", ["loans and advances to customers", "loans and advances",
+                            "net loans and advances", "customer loans", "loans to customers",
+                            "advances to customers", "gross loans and advances"]),
+    ("customer_deposits", ["customer deposits", "deposits from customers", "total deposits",
+                           "deposits", "demand and time deposits", "current and savings deposits"]),
+    ("current_assets", ["total current assets", "current assets"]),
+    ("total_assets", ["total assets"]),
+    ("current_liabilities", ["total current liabilities", "current liabilities"]),
+    ("total_liabilities", ["total liabilities"]),
+    ("total_debt", ["total borrowings", "total debt", "other borrowings"]),
+    ("total_equity", ["total equity", "shareholders equity", "total shareholders equity",
+                      "equity attributable to owners", "equity attributable to shareholders"]),
+    ("retained_earnings", ["retained earnings", "retained profit"]),
+    ("non_performing_loans", ["non-performing loans", "npls", "impaired loans", "impaired advances"]),
+]
+
+# A document is treated as a bank when it shows bank-specific line items and none
+# of the manufacturing/corporate signals (COGS, inventory).
+_BANK_SIGNALS = ["loans and advances", "customer deposits", "net interest income",
+                "non-performing loans", "balances with central banks", "impaired loans",
+                "deposits from customers"]
+_CORP_SIGNALS = ["cost of sales", "cost of goods sold", "inventory", "cogs", "cost of revenue"]
+
+
+def _is_bank(text: str) -> bool:
+    t = text.lower()
+    bank = sum(1 for s in _BANK_SIGNALS if s in t)
+    corp = sum(1 for s in _CORP_SIGNALS if s in t)
+    return bank > 0 and corp == 0
 
 
 # ── Per-page extraction ──────────────────────────────────────────────────────
@@ -164,7 +220,7 @@ def _find_best_table(tables: list[list[list[str]]]) -> list[list[str]] | None:
     return max(tables, key=numeric_ratio)
 
 
-def _table_to_fields(table: list[list[str]]) -> dict[str, tuple[float | None, str]]:
+def _table_to_fields(table: list[list[str]], label_map: list = _LABEL_MAP) -> dict[str, tuple[float | None, str]]:
     """Extract fields from a table. Returns {field: (value, source)}."""
     if not table or len(table[0]) < 2:
         return {}
@@ -182,7 +238,7 @@ def _table_to_fields(table: list[list[str]]) -> dict[str, tuple[float | None, st
             value = None
 
         # Match label to canonical field
-        for field, keywords in _LABEL_MAP:
+        for field, keywords in label_map:
             if any(kw in label for kw in keywords):
                 if field not in result:
                     result[field] = (value, "table")
@@ -191,12 +247,12 @@ def _table_to_fields(table: list[list[str]]) -> dict[str, tuple[float | None, st
     return result
 
 
-def _heuristic_from_text(text: str) -> dict[str, tuple[float | None, str]]:
+def _heuristic_from_text(text: str, label_map: list = _LABEL_MAP) -> dict[str, tuple[float | None, str]]:
     """Keyword/number heuristic on raw text. Returns {field: (value, source)}."""
     text_lower = text.lower()
     found: dict[str, tuple[float | None, str]] = {}
 
-    for field, keywords in _LABEL_MAP:
+    for field, keywords in label_map:
         for kw in keywords:
             idx = text_lower.find(kw)
             if idx != -1:
@@ -380,16 +436,17 @@ _STMT_PATTERNS = [
 _YEAR_RE = re.compile(r"(?:19|20)\d{2}")
 
 
-def _match_label(label: str) -> str | None:
+def _match_label(label: str, label_map: list = _LABEL_MAP) -> str | None:
     """Match a statement label to a canonical field.
 
     Uses the LONGEST matching keyword so specific phrases win over broad
     substrings (e.g. "cost of sales" must map to `cogs`, not to `revenue`
-    via the "sales" keyword).
+    via the "sales" keyword). `label_map` may be swapped for `_BANK_LABEL_MAP`
+    when the document is detected as a bank.
     """
     best = None
     best_len = 0
-    for field, keywords in _LABEL_MAP:
+    for field, keywords in label_map:
         for kw in keywords:
             if kw in label and len(kw) > best_len:
                 best = field
@@ -429,7 +486,7 @@ def _extract_year_columns(header_cells: list[str]) -> list[tuple[int, int]]:
     return cols
 
 
-def _parse_section_table(text: str) -> dict[str, dict[int, float]] | None:
+def _parse_section_table(text: str, match_label=_match_label) -> dict[str, dict[int, float]] | None:
     """Parse the first Markdown table in a section into {field: {year: value}}."""
     rows: list[list[str]] = []
     for line in text.splitlines():
@@ -453,7 +510,7 @@ def _parse_section_table(text: str) -> dict[str, dict[int, float]] | None:
         label = row[0].lower() if row else ""
         if not label:
             continue
-        field = _match_label(label)
+        field = match_label(label)
         if not field:
             continue
         for idx, yr in year_cols:
@@ -467,6 +524,10 @@ def _parse_section_table(text: str) -> dict[str, dict[int, float]] | None:
 def _parse_markdown_to_periods(
     md: str, entity: str | None = None, fallback_year: str = "2023"
 ) -> tuple[list[PeriodFinancials], dict]:
+    is_bank = _is_bank(md)
+    label_map = _BANK_LABEL_MAP if is_bank else _LABEL_MAP
+    match_label = (_match_label if not is_bank else
+                   (lambda lbl: _match_label(lbl, _BANK_LABEL_MAP)))
     sections = _split_statements(md)
     stmt_data: dict[str, dict[str, dict[int, float]]] = {
         "income": {}, "balance": {}, "cashflow": {}
@@ -476,7 +537,7 @@ def _parse_markdown_to_periods(
 
     for stype, text in sections:
         if stype in stmt_data:
-            tbl = _parse_section_table(text)
+            tbl = _parse_section_table(text, match_label)
             if tbl:
                 any_table = True
                 for f, ym in tbl.items():
@@ -484,12 +545,12 @@ def _parse_markdown_to_periods(
                     detected_years.update(ym.keys())
                 continue
             # no table in a typed section -> heuristic (single period)
-            for f, (v, _src) in _heuristic_from_text(text).items():
+            for f, (v, _src) in _heuristic_from_text(text, label_map).items():
                 if v is not None:
                     stmt_data[stype].setdefault(f, {}).setdefault(int(fallback_year), v)
         else:
             # preamble / untyped section -> heuristic across all statements
-            for f, (v, _src) in _heuristic_from_text(text).items():
+            for f, (v, _src) in _heuristic_from_text(text, label_map).items():
                 if v is None:
                     continue
                 if f in IncomeStatement.model_fields:
@@ -513,7 +574,7 @@ def _parse_markdown_to_periods(
         ))
 
     distinct = {f for s in stmt_data.values() for f in s}
-    coverage = len(distinct) / len(_LABEL_MAP)
+    coverage = len(distinct) / len(label_map)
     confidence = round(min(coverage, 1.0), 3)
     method = "table" if any_table else "heuristic"
     implicit_year = (not detected_years)
@@ -528,6 +589,7 @@ def _parse_markdown_to_periods(
         "confidence_label": _confidence_label(confidence),
         "years": [str(y) for y in years],
         "review_required": bool(review_required),
+        "is_bank": is_bank,
         "markdown": md,
         "entity": entity,
     }

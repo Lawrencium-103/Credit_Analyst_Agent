@@ -54,7 +54,7 @@ def run_research(
     llm_complete: Callable[[list[dict]], str] | None = None,
     days: int = 540,
 ) -> ResearchDossier:
-    sector = sector or "sustainable drinkware / reusable beverage containers"
+    sector = sector or client_name or "the subject industry"
     plan = build_plan(sector)
     provider = provider or get_provider("tavily")
     judge = (lambda c, u, d: llm_judge(c, u, d, llm_complete)) if llm_complete else rule_judge

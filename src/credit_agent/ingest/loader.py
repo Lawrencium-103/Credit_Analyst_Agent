@@ -20,7 +20,7 @@ from ..schema.financials import (
     PeriodFinancials,
 )
 from .generic_xlsx import parse_generic_xlsx_multi
-from .pdf import _match_label, parse_markdown_document, parse_pdf_document
+from .pdf import _BANK_LABEL_MAP, _BANK_SIGNALS, _match_label, parse_markdown_document, parse_pdf_document
 from ..spreading.loader import load_sc_workbook
 from pathlib import Path
 
@@ -62,13 +62,17 @@ def _period_from_flat(obj: dict) -> PeriodFinancials:
     """Build a single PeriodFinancials from a flat {label: value} mapping.
 
     Uses the same label matcher as the PDF/Markdown pipelines so keys like
-    "Net Revenue" or "Total Borrowings" land in the right schema field.
+    "Net Revenue" or "Total Borrowings" land in the right schema field. Bank
+    statements (keys mentioning loans/deposits/interest income) use the bank map.
     """
+    keys_lower = [str(k).lower() for k in obj.keys()]
+    use_bank = any(any(sig in k for sig in _BANK_SIGNALS) for k in keys_lower)
+    match = (lambda lbl: _match_label(lbl, _BANK_LABEL_MAP)) if use_bank else _match_label
     inc, bal, cf = {}, {}, {}
     for k, v in obj.items():
         if v is None:
             continue
-        field = _match_label(str(k).lower())
+        field = match(str(k).lower())
         if not field:
             continue
         if field in IncomeStatement.model_fields:
@@ -109,6 +113,11 @@ def parse_json_document(text: str, fallback_year: str = "2023") -> tuple[list[Pe
     if not periods:
         raise ValueError("JSON contained no parseable period objects.")
 
+    is_bank = any(
+        p.balance_sheet.loans_and_advances is not None or p.balance_sheet.customer_deposits is not None
+        or p.income_statement.net_interest_income is not None
+        for p in periods
+    )
     filled = sum(
         1 for p in periods
         for stmt in (p.income_statement, p.balance_sheet, p.cash_flow)
@@ -123,6 +132,7 @@ def parse_json_document(text: str, fallback_year: str = "2023") -> tuple[list[Pe
         "confidence_label": "high" if confidence >= 0.7 else ("medium" if confidence >= 0.4 else "low"),
         "years": [p.period for p in periods],
         "review_required": False,
+        "is_bank": is_bank,
     }
     return periods, confidence, meta
 
@@ -189,6 +199,16 @@ def ingest_file(path: str, year: int, entity: str | None = None) -> tuple[list[P
         ))
     else:
         raise ValueError(f"Unsupported file type: .{ext}")
+
+    if meta.get("is_bank"):
+        flags.append(IngestionFlag(
+            level="info",
+            message=(
+                "Bank / financial-institution statement detected — NIM, Loan/Deposit, "
+                "NPL and Cost/Income computed; corporate leverage & coverage ratios are "
+                "indicative only for banks and should not drive the rating as-is."
+            ),
+        ))
 
     return periods, flags, confidence, meta
 

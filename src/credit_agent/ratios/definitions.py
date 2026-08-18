@@ -18,6 +18,7 @@ class RatioCategory(str, Enum):
     PROFITABILITY = "profitability"
     EFFICIENCY = "efficiency"
     SOLVENCY = "solvency"
+    BANK = "bank"
 
 
 class Direction(str, Enum):
@@ -187,5 +188,30 @@ RATIO_DEFINITIONS: dict[str, RatioDefinition] = {
         formula="operating_cash_flow / capital_expenditures", direction=Direction.HIGHER_IS_BETTER,
         healthy_min=1.0,
         description="Operating cash generated per unit of capital expenditure.",
+    ),
+    # ── Bank-specific ratios (separate category; NOT used by the corporate rating) ──
+    "net_interest_margin": RatioDefinition(
+        key="net_interest_margin", label="Net Interest Margin", category=RatioCategory.BANK,
+        formula="net_interest_income / total_assets", direction=Direction.HIGHER_IS_BETTER,
+        unit="%", healthy_min=2.0,
+        description="Core spread earned on a bank's interest-earning assets.",
+    ),
+    "loan_to_deposit": RatioDefinition(
+        key="loan_to_deposit", label="Loan / Deposit", category=RatioCategory.BANK,
+        formula="loans_and_advances / customer_deposits", direction=Direction.LOWER_IS_BETTER,
+        healthy_max=1.0,
+        description="Funding reliance on customer deposits vs lending book.",
+    ),
+    "npl_ratio": RatioDefinition(
+        key="npl_ratio", label="NPL Ratio", category=RatioCategory.BANK,
+        formula="non_performing_loans / loans_and_advances", direction=Direction.LOWER_IS_BETTER,
+        unit="%", healthy_max=5.0,
+        description="Share of the loan book that is non-performing.",
+    ),
+    "cost_to_income": RatioDefinition(
+        key="cost_to_income", label="Cost / Income", category=RatioCategory.BANK,
+        formula="operating_expenses / (revenue or net_interest_income)", direction=Direction.LOWER_IS_BETTER,
+        unit="%", healthy_max=60.0,
+        description="Operating efficiency of the bank.",
     ),
 }

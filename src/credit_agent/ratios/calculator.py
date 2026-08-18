@@ -154,6 +154,22 @@ def compute_ratios(current: PeriodFinancials, prior: PeriodFinancials | None = N
         if cf.capital_expenditures else None,
     }
 
+    # Bank-specific ratios (only when bank line items are present). These live in
+    # the BANK category, which the corporate rating does not weight, so they never
+    # distort a non-bank score. They simply surface for bank obligors.
+    has_bank = (
+        bs.loans_and_advances is not None
+        or bs.customer_deposits is not None
+        or is_.net_interest_income is not None
+    )
+    if has_bank:
+        assets = avg_bs.total_assets if avg_bs else bs.total_assets
+        values["net_interest_margin"] = _safe_div(is_.net_interest_income, assets)
+        values["loan_to_deposit"] = _safe_div(bs.loans_and_advances, bs.customer_deposits)
+        values["npl_ratio"] = _safe_div(bs.non_performing_loans, bs.loans_and_advances)
+        top_line = is_.revenue or is_.net_interest_income
+        values["cost_to_income"] = _safe_div(is_.operating_expenses, top_line)
+
     results: list[RatioResult] = []
     for key, definition in RATIO_DEFINITIONS.items():
         val = values.get(key)

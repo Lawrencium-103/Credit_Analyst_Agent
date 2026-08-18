@@ -142,7 +142,7 @@ def stress_bundle(path: str) -> dict:
 
 
 def industry_context(client_name: str, sector: str | None = None) -> dict:
-    sector = sector or "sustainable drinkware manufacturing"
+    sector = sector or (client_name or "the subject industry")
     return {
         "client_name": client_name,
         "sector": sector,
@@ -153,10 +153,10 @@ def industry_context(client_name: str, sector: str | None = None) -> dict:
             "weigh in its assessment."
         ),
         "considerations": [
-            "Sustainability / ESG-driven demand tailwinds for reusable drinkware.",
-            "Exposure to consumer-discretionary demand cycles and input-cost (commodity) inflation.",
-            "Capital-intensive manufacturing model with meaningful capex requirements.",
-            "Competitive landscape includes both established beverage-container brands and low-cost producers.",
+            "Demand cyclicality and exposure to the relevant macro/credit cycle.",
+            "Input-cost, pricing-power and margin sensitivity to cost inflation.",
+            "Capital-intensity and capex requirements relative to cash generation.",
+            "Competitive landscape, market structure and concentration risk.",
         ],
     }
 

@@ -305,7 +305,7 @@ def research_response(body: dict) -> dict:
             sector = load_sc_workbook(path).entity_name
         except Exception:
             sector = None
-    sector = sector or "sustainable drinkware / reusable beverage containers"
+    sector = sector or body.get("entity") or "the subject industry"
     try:
         provider = get_provider("tavily")
         dossier = run_research(
