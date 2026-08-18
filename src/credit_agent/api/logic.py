@@ -32,7 +32,7 @@ from ..agent.tools import (
 from ..analysis.standards import evaluate_standards
 from ..ingest.loader import ingest, build_matrix
 from ..ratios.calculator import compute_ratios
-from ..report.builder import assemble_report
+from ..report.builder import assemble_report, _BLIND_SPOTS
 from ..report.cam import build_memo, render_markdown
 from ..report.export import export_docx, export_html, export_pdf
 from ..research.dossier import render_dossier_md, run_research
@@ -192,6 +192,75 @@ def build_report_file(body: dict, fmt: str) -> bytes | None:
     if fmt == "docx":
         return export_docx(report)
     return None
+
+
+def dashboard_bundle(body: dict) -> dict:
+    """Structured, chart-ready payload for the visual dashboard page.
+
+    Returns everything the dashboard renders: company, risk rating, per-period KPI
+    and ratio series, covenants, stress, standards, optional sourced research and
+    the static blind-spot checklist. All numbers are computed, never generated.
+    """
+    try:
+        company = _company_from_req(body)
+    except Exception as e:
+        return {"error": str(e)}
+
+    analysis = analysis_bundle_from_company(company)
+    figures = extract_figures(company)
+    ratios_map = {r.key: r.value for r in compute_ratios(company.latest(), company.prior()).results}
+    standards = assess_standards(ratios_map, body.get("standards"))
+
+    research_report = None
+    if body.get("run_research", True):
+        try:
+            provider = get_provider("tavily")
+            dossier = run_research(
+                body.get("company_name", "Client"),
+                body.get("sector"),
+                provider=provider,
+                llm_complete=None,
+            )
+            research_report = dossier.report.model_dump()
+        except Exception:
+            pass
+
+    rt = analysis.get("ratio_trajectories", {})
+    ratios_out: dict = {}
+    for r in analysis.get("ratios", []):
+        k = r.get("key")
+        traj = rt.get(k, {})
+        ratios_out[k] = {
+            "label": r.get("label"),
+            "category": r.get("category"),
+            "unit": r.get("unit"),
+            "value": r.get("value"),
+            "trajectory": traj.get("trajectory"),
+            "values": traj.get("values", []),
+        }
+
+    kpis_out: dict = {}
+    for k, t in analysis.get("kpis", {}).items():
+        kpis_out[k] = {"label": k.replace("_", " ").title(), **t}
+
+    return {
+        "company": {
+            "name": company.entity_name,
+            "currency": company.currency,
+            "sector": body.get("sector"),
+            "background": body.get("company_background"),
+            "periods": [p.period for p in company.periods],
+        },
+        "risk_rating": analysis.get("risk_rating"),
+        "kpis": kpis_out,
+        "ratios": ratios_out,
+        "covenants": analysis.get("covenants"),
+        "stress_scenarios": analysis.get("stress_scenarios"),
+        "standards_assessment": standards,
+        "research": research_report,
+        "blind_spots": _BLIND_SPOTS,
+        "currency": (figures or {}).get("currency") or company.currency,
+    }
 
 
 def run_agent_response(body: dict) -> dict:

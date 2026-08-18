@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ATLAS — Credit Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+tailwind.config={theme:{extend:{fontFamily:{sans:["Plus Jakarta Sans","system-ui","sans-serif"],display:["Space Grotesk","system-ui","sans-serif"],mono:["JetBrains Mono","ui-monospace","monospace"]},colors:{paper:"#F6F2EC","paper-2":"#FBF9F4",ink:"#16130F","ink-soft":"#534B40",amber:"#CC8800","amber-deep":"#A86C00",burnt:"#C55221"},borderRadius:{"4xl":"2rem","5xl":"2.5rem"}}}};
+</script>
+<style>
+:root{color-scheme:light}
+html,body{background:#F6F2EC}
+body{font-family:"Plus Jakarta Sans",system-ui,sans-serif;color:#16130F;-webkit-font-smoothing:antialiased}
+.grain::before{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.035;mix-blend-mode:multiply;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.display{font-family:"Space Grotesk",system-ui,sans-serif;letter-spacing:-.02em}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+.bezel{background:rgba(22,19,15,.04);border-radius:2rem;padding:.4rem;box-shadow:0 1px 2px rgba(22,19,15,.04)}
+.bezel>.core{background:#fff;border-radius:calc(2rem - .4rem);padding:1.75rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+.eyebrow{font-size:11px;letter-spacing:.28em;text-transform:uppercase;font-weight:600;color:#A86C00}
+.eyebrow::before{content:"";display:inline-block;width:6px;height:6px;border-radius:999px;background:#CC8800;margin-right:10px;vertical-align:middle}
+.btn{display:inline-flex;align-items:center;gap:.75rem;border-radius:999px;padding:.85rem 1.5rem;font-weight:600;transition:all .5s cubic-bezier(.32,.72,0,1)}
+.btn-amber{background:#16130F;color:#F6F2EC}.btn-amber:hover{background:#2a241c}.btn-amber:active{transform:scale(.98)}.btn-amber:disabled{opacity:.4;pointer-events:none}
+.btn-ghost{background:rgba(22,19,15,.05);color:#16130F}.btn-ghost:hover{background:rgba(22,19,15,.09)}
+.btn .ic{width:34px;height:34px;border-radius:999px;background:rgba(204,136,0,.16);color:#CC8800;display:grid;place-items:center}
+.pill-nav{background:rgba(251,249,244,.72);backdrop-filter:blur(18px);border:1px solid rgba(22,19,15,.07)}
+input,textarea,select{font-family:inherit}
+.field{background:#FBF9F4;border:1px solid rgba(22,19,15,.1);border-radius:.9rem;padding:.7rem .9rem;width:100%;color:#16130F;transition:all .3s ease}
+.field:focus{outline:none;border-color:#CC8800;box-shadow:0 0 0 3px rgba(204,136,0,.14)}
+.card{background:#fff;border:1px solid rgba(22,19,15,.07);border-radius:1.5rem;padding:1.4rem;box-shadow:0 1px 2px rgba(22,19,15,.04)}
+.kpi{background:#fff;border:1px solid rgba(22,19,15,.07);border-radius:1.5rem;padding:1.2rem 1.3rem;box-shadow:0 1px 2px rgba(22,19,15,.04);position:relative;overflow:hidden}
+.kpi .val{font-family:"Space Grotesk";font-weight:600;font-size:1.5rem;letter-spacing:-.02em}
+.kpi .spark{position:absolute;right:10px;bottom:8px;width:90px;height:34px;opacity:.8}
+.chip{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px}
+.chip-green{background:rgba(22,163,74,.12);color:#15803d}
+.chip-amber{background:rgba(204,136,0,.14);color:#A86C00}
+.chip-red{background:rgba(197,82,33,.14);color:#C55221}
+.chip-grey{background:rgba(22,19,15,.07);color:#534B40}
+.up{color:#15803d}.down{color:#C55221}.flat{color:#534B40}
+.band-green{background:#16A34A;color:#fff}.band-amber{background:#CC8800;color:#fff}.band-red{background:#C55221;color:#fff}
+.spinner{width:18px;height:18px;border:2px solid rgba(246,242,236,.4);border-top-color:#F6F2EC;border-radius:999px;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.list-dot{display:flex;gap:.7rem}.list-dot::before{content:"";flex:0 0 auto;width:7px;height:7px;border-radius:999px;background:#CC8800;margin-top:.55rem}
+.hidden{display:none}
+</style>
+</head>
+<body class="grain">
+<nav class="pill-nav fixed top-0 inset-x-0 z-30 mt-3 mx-3 sm:mx-auto sm:max-w-6xl rounded-full px-4 py-2 flex items-center justify-between">
+  <div class="flex items-center gap-2"><span class="eyebrow !mr-0">ATLAS</span><span class="text-sm font-medium text-ink-soft">Credit Dashboard</span></div>
+  <div class="flex items-center gap-2">
+    <a href="/" class="btn btn-ghost !py-2 !px-4 !text-xs">← Brief</a>
+  </div>
+</nav>
+
+<main class="relative z-10 max-w-6xl mx-auto px-4 pt-28 pb-20">
+
+  <!-- Intake -->
+  <section class="bezel">
+    <div class="core">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div><p class="eyebrow">Build</p><h1 class="display text-2xl font-bold mt-1">Visual credit dashboard</h1></div>
+        <button id="useExample" class="btn btn-ghost !py-2 !px-4 !text-xs">Use example workbook</button>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4 mt-5">
+        <div><label class="text-sm font-medium">Company</label><input id="dCompany" class="field mt-1" placeholder="Client name" /></div>
+        <div><label class="text-sm font-medium">Sector</label><input id="dSector" class="field mt-1" placeholder="e.g. sustainable drinkware" /></div>
+      </div>
+      <div class="mt-3"><label class="text-sm font-medium">Company background</label>
+        <textarea id="dBackground" rows="2" class="field mt-1" placeholder="HQ, customer base, capex strategy — shown verbatim in the brief."></textarea></div>
+      <div class="mt-3 flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-3">
+          <input id="dFile" type="file" class="text-sm" />
+          <label class="flex items-center gap-2 text-sm text-ink-soft"><input id="dResearch" type="checkbox" checked /> Include live research</label>
+        </div>
+        <button id="buildDash" class="btn btn-amber">Build dashboard<span class="ic">→</span></button>
+      </div>
+      <p id="dashErr" class="hidden text-burnt text-sm font-medium mt-3"></p>
+    </div>
+  </section>
+
+  <!-- Dashboard -->
+  <div id="dash" class="hidden mt-8 space-y-6">
+    <!-- Header -->
+    <section class="card">
+      <div class="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <p id="dSectorBadge" class="eyebrow"></p>
+          <h2 id="dName" class="display text-3xl font-bold mt-1"></h2>
+          <p id="dMeta" class="text-ink-soft text-sm mt-1"></p>
+          <p id="dBackgroundTxt" class="text-sm mt-3 max-w-2xl text-ink-soft"></p>
+        </div>
+        <div id="dBand" class="text-center px-5 py-3 rounded-2xl">
+          <div id="dBandLabel" class="display text-xl font-bold"></div>
+          <div id="dBandSub" class="text-xs opacity-90 mt-1"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- KPIs -->
+    <section>
+      <p class="eyebrow mb-3">Key metrics</p>
+      <div id="kpiGrid" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+    </section>
+
+    <!-- Charts -->
+    <section class="grid lg:grid-cols-2 gap-5">
+      <div class="card"><p class="eyebrow mb-2">Revenue & EBITDA</p><canvas id="chRev" height="150"></canvas></div>
+      <div class="card"><p class="eyebrow mb-2">Margin trends</p><canvas id="chMargin" height="150"></canvas></div>
+      <div class="card"><p class="eyebrow mb-2">Leverage & liquidity</p><canvas id="chLev" height="150"></canvas></div>
+      <div class="card"><p class="eyebrow mb-2">Trajectory balance</p><canvas id="chTraj" height="150"></canvas></div>
+      <div class="card lg:col-span-2"><p class="eyebrow mb-2">Risk profile</p><canvas id="chRisk" height="130"></canvas></div>
+    </section>
+
+    <!-- Covenants + Stress + Standards -->
+    <section class="grid lg:grid-cols-3 gap-5">
+      <div class="card"><p class="eyebrow mb-3">Covenants</p><div id="covList" class="space-y-2"></div></div>
+      <div class="card"><p class="eyebrow mb-3">Stress testing</p><div id="stressList" class="space-y-3"></div></div>
+      <div class="card"><p class="eyebrow mb-3">Industry standard</p><div id="stdBox"></div></div>
+    </section>
+
+    <!-- Research -->
+    <section class="card">
+      <p class="eyebrow mb-3">Research signals</p>
+      <div id="researchBox"><p class="text-ink-soft text-sm">No live research performed.</p></div>
+    </section>
+
+    <!-- Adjacent / blind spots -->
+    <section class="card">
+      <p class="eyebrow mb-1">Adjacent analysis — blind-spot scan</p>
+      <p class="text-ink-soft text-xs mb-3">Advisory only — does not alter the rating or recommendation.</p>
+      <div id="blindList" class="grid md:grid-cols-2 gap-x-6 gap-y-2"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const PALETTE={ink:"#16130F",amber:"#CC8800",soft:"#534B40",green:"#16A34A",red:"#C55221",line:"rgba(22,19,15,.5)"};
+function API(m,u,b){return fetch(u,{method:m,headers:b?{"Content-Type":"application/json"}:{},body:b?JSON.stringify(b):undefined}).then(r=>r.json());}
+const charts={};
+function destroyCharts(){Object.values(charts).forEach(c=>c&&c.destroy());for(const k in charts)delete charts[k];}
+function fmt(v){if(v==null)return "n/a";if(Math.abs(v)>=1000)return (v/1000).toLocaleString(undefined,{maximumFractionDigits:1})+"k";return Number(v).toLocaleString(undefined,{maximumFractionDigits:1});}
+function bandClass(rec){const r=(rec||"").toUpperCase();if(/DECLINE/.test(r))return"band-red";if(/CONDITION|RESTRUCTURE|MONITOR/.test(r))return"band-amber";return"band-green";}
+function trajClass(t){return t==="improving"?"up":t==="deteriorating"?"down":"flat";}
+
+async function build(){
+  const btn=document.getElementById("buildDash");btn.disabled=true;
+  document.getElementById("dashErr").classList.add("hidden");
+  const body={
+    company_name:document.getElementById("dCompany").value||"Client",
+    sector:document.getElementById("dSector").value||null,
+    company_background:document.getElementById("dBackground").value||null,
+    run_research:document.getElementById("dResearch").checked,
+  };
+  try{
+    const file=document.getElementById("dFile").files[0];
+    let bundle;
+    if(file){
+      const fd=new FormData();fd.append("files",file);fd.append("meta",JSON.stringify([{year:2023,entity:body.company_name}]));
+      const ing=await fetch("/api/ingest",{method:"POST",body:fd}).then(r=>r.json());
+      if(ing.error)throw new Error(ing.error);
+      bundle=await API("POST","/api/dashboard",{...body,company_name:ing.entity_name,periods:ing.periods});
+    }else{
+      bundle=await API("POST","/api/dashboard",body);
+    }
+    if(bundle.error)throw new Error(bundle.error);
+    render(bundle);
+  }catch(e){
+    const el=document.getElementById("dashErr");el.textContent="Error: "+e.message;el.classList.remove("hidden");
+  }finally{btn.disabled=false;}
+}
+
+function render(d){
+  destroyCharts();
+  document.getElementById("dash").classList.remove("hidden");
+  const c=d.company, rr=d.risk_rating||{};
+  document.getElementById("dName").textContent=c.name||"Client";
+  document.getElementById("dSectorBadge").textContent=c.sector?("Sector · "+c.sector):"Sector · n/a";
+  document.getElementById("dMeta").textContent="Periods: "+(c.periods||[]).join(", ")+"  ·  "+(c.currency||"");
+  const bg=document.getElementById("dBackgroundTxt");
+  if(c.background){bg.textContent=c.background;bg.classList.remove("hidden");}else bg.classList.add("hidden");
+  const band=document.getElementById("dBand");
+  band.className="text-center px-5 py-3 rounded-2xl "+bandClass(rr.band);
+  document.getElementById("dBandLabel").textContent=rr.band||"n/a";
+  document.getElementById("dBandSub").textContent="composite "+(rr.composite_score??"")+" · PD "+(rr.pd_estimate??"");
+  renderKPIs(d);
+  renderCharts(d);
+  renderCovenants(d.covenants||[]);
+  renderStress(d.stress_scenarios||[]);
+  renderStandards(d.standards_assessment||{});
+  renderResearch(d.research);
+  renderBlind(d.blind_spots||[]);
+  window.scrollTo({top:document.getElementById("dash").offsetTop-90,behavior:"smooth"});
+}
+
+function renderKPIs(d){
+  const keys=["revenue","ebitda","net_income","total_assets","total_debt","total_equity","operating_cash_flow","free_cash_flow"];
+  const grid=document.getElementById("kpiGrid");grid.innerHTML="";const periods=d.company.periods||[];
+  let i=0;
+  keys.forEach((k)=>{
+    const t=d.kpis[k];if(!t||!t.values||!t.values.some(v=>v!=null))return;
+    const vals=t.values;const last=vals.filter(v=>v!=null).slice(-1)[0];
+    const g=t.yoy_growth;const lastG=g&&g.filter(v=>v!=null).slice(-1)[0];
+    const div=document.createElement("div");div.className="kpi";
+    const arrow=lastG!=null?`<span class="${trajClass(lastG>0?'improving':lastG<0?'deteriorating':'stable')} text-sm font-semibold">${lastG>0?'+':''}${(lastG*100).toFixed(0)}%</span>`:"";
+    div.innerHTML=`<p class="text-xs text-ink-soft font-medium">${t.label}</p>
+      <div class="val mt-1">${fmt(last)}</div>
+      <div class="mt-1">${arrow}<span class="text-xs text-ink-soft ml-1">YoY</span></div>
+      <canvas class="spark" id="sp${i}"></canvas>`;
+    grid.appendChild(div);
+    const cv=document.getElementById("sp"+i);
+    charts["sp"+i]=new Chart(cv,{type:"line",data:{labels:periods,datasets:[{data:vals,borderColor:PALETTE.amber,borderWidth:2,fill:false}]},
+      options:{plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false}},elements:{point:{radius:0}}}});
+    i++;
+  });
+}
+
+function renderCharts(d){
+  const periods=d.company.periods||[];
+  const series=k=>{const r=d.ratios[k];return r&&r.values&&r.values.length?r.values:periods.map(()=>null);};
+  charts.chRev=new Chart(document.getElementById("chRev"),{type:"bar",data:{labels:periods,datasets:[
+    {type:"bar",label:"Revenue",data:series("revenue"),backgroundColor:"rgba(22,19,15,.85)"},
+    {type:"line",label:"EBITDA",data:series("ebitda"),borderColor:PALETTE.amber,borderWidth:3,pointRadius:3,tension:.3}]},
+    options:baseOpts(["Revenue","EBITDA"])});
+  charts.chMargin=new Chart(document.getElementById("chMargin"),{type:"line",data:{labels:periods,datasets:[
+    {label:"Gross",data:series("gross_margin"),borderColor:PALETTE.amber,borderWidth:2,pointRadius:2,tension:.3},
+    {label:"EBITDA",data:series("ebitda_margin"),borderColor:PALETTE.green,borderWidth:2,pointRadius:2,tension:.3},
+    {label:"Net",data:series("net_margin"),borderColor:PALETTE.ink,borderWidth:2,pointRadius:2,tension:.3}]},
+    options:baseOpts(["Gross","EBITDA","Net"],"%")});
+  charts.chLev=new Chart(document.getElementById("chLev"),{type:"line",data:{labels:periods,datasets:[
+    {label:"Debt/Equity",data:series("debt_to_equity"),borderColor:PALETTE.ink,borderWidth:2,pointRadius:2,tension:.3,yAxisID:"y"},
+    {label:"Interest cover",data:series("interest_coverage"),borderColor:PALETTE.amber,borderWidth:2,pointRadius:2,tension:.3,yAxisID:"y1"}]},
+    options:{plugins:{legend:{position:"bottom",labels:{boxWidth:10,font:{size:10}}}},scales:{x:{ticks:{font:{size:10}}},y:{position:"left",ticks:{font:{size:10}}},y1:{position:"right",grid:{drawOnChartArea:false},ticks:{font:{size:10}}}},elements:{point:{radius:2}}}});
+  const traj={improving:0,stable:0,deteriorating:0};
+  Object.values(d.ratios).forEach(r=>{if(r.trajectory&&traj[r.trajectory]!=null)traj[r.trajectory]++;});
+  charts.chTraj=new Chart(document.getElementById("chTraj"),{type:"doughnut",data:{labels:["Improving","Stable","Deteriorating"],datasets:[{data:[traj.improving,traj.stable,traj.deteriorating],backgroundColor:[PALETTE.green,PALETTE.soft,PALETTE.red]}]},
+    options:{plugins:{legend:{position:"bottom",labels:{boxWidth:10,font:{size:10}}}},cutout:"62%"}});
+  const cs=(d.risk_rating&&d.risk_rating.category_scores)||{};
+  const cats=Object.keys(cs);
+  charts.chRisk=new Chart(document.getElementById("chRisk"),{type:"radar",data:{labels:cats,datasets:[{label:"Score (1-5)",data:cats.map(c=>cs[c]),borderColor:PALETTE.amber,backgroundColor:"rgba(204,136,0,.15)",pointBackgroundColor:PALETTE.amber}]},
+    options:{plugins:{legend:{display:false}},scales:{r:{min:0,max:5,ticks:{stepSize:1,font:{size:9}},pointLabels:{font:{size:10}}}}}});
+}
+function baseOpts(legend,unit){
+  return{plugins:{legend:{position:"bottom",labels:{boxWidth:10,font:{size:10}}}},
+    scales:{x:{ticks:{font:{size:10}}},y:{ticks:{font:{size:10},callback:v=>unit==="%"?v+"%":fmt(v)}}},
+    elements:{point:{radius:2}}};
+}
+
+function renderCovenants(cov){
+  const el=document.getElementById("covList");el.innerHTML="";
+  if(!cov.length){el.innerHTML='<p class="text-ink-soft text-sm">None evaluated.</p>';return;}
+  cov.forEach(c=>{
+    const st=(c.status||"").toUpperCase();
+    const cls=st==="PASS"?"chip-green":(st==="FAIL"||st==="BREACH")?"chip-red":"chip-amber";
+    const div=document.createElement("div");div.className="flex items-center justify-between text-sm";
+    div.innerHTML=`<span class="font-medium">${c.name}</span><span class="chip ${cls}">${c.status} · ${c.actual??""} / ${c.threshold}</span>`;
+    el.appendChild(div);
+  });
+}
+function renderStress(s){
+  const el=document.getElementById("stressList");el.innerHTML="";
+  if(!s.length){el.innerHTML='<p class="text-ink-soft text-sm">None.</p>';return;}
+  s.forEach(sc=>{
+    const div=document.createElement("div");div.className="text-sm";
+    const br=sc.breached_covenants&&sc.breached_covenants.length?sc.breached_covenants.join(", "):"none";
+    div.innerHTML=`<p class="font-medium">${sc.scenario}</p>
+      <p class="text-ink-soft">${sc.base_rating} → <span class="font-semibold">${sc.stressed_rating}</span> <span class="chip chip-amber">${sc.rating_downgrade} notch</span></p>
+      <p class="text-xs text-ink-soft">Breaches: ${br}</p>`;
+    el.appendChild(div);
+  });
+}
+function renderStandards(s){
+  const el=document.getElementById("stdBox");
+  if(!s||(s.compliance_score!==0&&!s.compliance_score)){el.innerHTML='<p class="text-ink-soft text-sm">n/a</p>';return;}
+  const pct=Math.round((s.compliance_score||0)*100);
+  const cls=s.meets_standard?"chip-green":"chip-amber";
+  el.innerHTML=`<div class="flex items-center gap-2"><span class="display text-2xl font-bold">${pct}%</span><span class="chip ${cls}">${s.meets_standard?"MEETS":"REVIEW"}</span></div>
+    <p class="text-xs text-ink-soft mt-1">Coverage ${Math.round((s.coverage||0)*100)}%</p>`;
+}
+function renderResearch(r){
+  const el=document.getElementById("researchBox");
+  if(!r||!r.findings||!r.findings.length){el.innerHTML='<p class="text-ink-soft text-sm">No live research performed (enable research or configure a provider).</p>';return;}
+  let h=`<p class="text-xs text-ink-soft mb-2">${r.sources?r.sources.length:0} sources · sector ${r.sector||"n/a"}</p>`;
+  h+='<ul class="space-y-2">';
+  r.findings.slice(0,8).forEach(f=>{h+=`<li class="list-dot text-sm"><span>${f.claim||""}${f.source_url?` <a class="text-amber-deep underline" href="${f.source_url}" target="_blank" rel="noopener">src</a>`:""}</span></li>`;});
+  h+='</ul>';
+  el.innerHTML=h;
+}
+function renderBlind(list){
+  const el=document.getElementById("blindList");el.innerHTML="";
+  list.forEach(t=>{const div=document.createElement("div");div.className="list-dot text-sm text-ink-soft";div.innerHTML=`<span>${t}</span>`;el.appendChild(div);});
+}
+
+document.getElementById("buildDash").addEventListener("click",build);
+document.getElementById("useExample").addEventListener("click",()=>{document.getElementById("buildDash").click();});
+</script>
+</body>
+</html>

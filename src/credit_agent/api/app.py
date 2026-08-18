@@ -21,6 +21,7 @@ from ..api.logic import (
     assess_standards,
     build_report_file,
     build_report_response,
+    dashboard_bundle,
     ingest_and_analyze,
     research_response,
     run_agent_response,
@@ -33,6 +34,7 @@ from ..spreading.loader import load_sc_workbook
 ROOT = Path(os.getcwd()).resolve()
 PUBLIC = ROOT / "public"
 _APP_HTML = Path(__file__).resolve().parent / "static" / "app.html"
+_DASH_HTML = Path(__file__).resolve().parent / "static" / "dashboard.html"
 # Serverless filesystems (e.g. Vercel) are read-only outside /tmp, so uploads
 # always land in the temp dir — valid for both local dev and serverless.
 UPLOAD_DIR = Path(tempfile.gettempdir()) / "credit_agent_uploads"
@@ -54,6 +56,14 @@ def index() -> str:
 @app.get("/marked.min.js")
 def marked_js():
     return FileResponse(str(PUBLIC / "marked.min.js"), media_type="application/javascript")
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard_page() -> str:
+    if _DASH_HTML.exists():
+        html = _DASH_HTML.read_text(encoding="utf-8")
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+    return HTMLResponse("<h1>Dashboard not found</h1>", status_code=404)
 
 
 # --------------------------------------------------------------------------- #
@@ -133,6 +143,26 @@ class ReportReq(BaseModel):
 def build_report(req: ReportReq):
     body = req.model_dump()
     out = build_report_response(body)
+    if "error" in out:
+        return JSONResponse(status_code=400, content=out)
+    return out
+
+
+class DashboardReq(BaseModel):
+    analyst_name: str | None = None
+    company_name: str = "Client"
+    purpose: str | None = None
+    workbook_path: str | None = None
+    periods: list[dict] | None = None
+    sector: str | None = None
+    company_background: str | None = None
+    standards: dict | None = None
+    run_research: bool = True
+
+
+@app.post("/api/dashboard")
+def dashboard_json(req: DashboardReq):
+    out = dashboard_bundle(req.model_dump())
     if "error" in out:
         return JSONResponse(status_code=400, content=out)
     return out
