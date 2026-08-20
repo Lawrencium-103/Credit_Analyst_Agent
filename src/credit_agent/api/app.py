@@ -41,7 +41,7 @@ UPLOAD_DIR = Path(tempfile.gettempdir()) / "credit_agent_uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 STANDARDS_PATH = ROOT / "data" / "standards.json"
 
-app = FastAPI(title="Credit Analyst Agent", version="0.3.0")
+app = FastAPI(title="Credit Analyst Agent", version="0.3.1")
 
 
 @app.get("/", response_class=HTMLResponse)
